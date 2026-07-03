@@ -2,6 +2,7 @@ import { getSupabase, type Database } from "./supabase";
 
 export type ProjectRow = {
   id: string;
+  user_id: string | null;
   name: string;
   prompt: string;
   category: string;
@@ -27,6 +28,7 @@ export type ProjectMessageRow = {
 export type ProjectVersionRow = {
   id: string;
   project_id: string;
+  user_id: string | null;
   label: string;
   author: string;
   html_snapshot: string;
@@ -59,24 +61,47 @@ export async function uploadProjectImage(input: {
   if (!input.contentType.startsWith("image/")) {
     throw new Error("Only image files can be uploaded.");
   }
-  const bytes = Uint8Array.from(atob(input.base64), (c) => c.charCodeAt(0));
+
+  // Reject oversized payloads before decoding (base64 overhead ≈ 4/3×)
+  if (input.base64.length > MAX_IMAGE_BYTES * 1.4) {
+    throw new Error("Image is too large (max 5MB).");
+  }
+
+  // Strip data-URL prefix ("data:image/jpeg;base64,") if the client sent it
+  const raw = input.base64.includes(",") ? input.base64.split(",")[1] : input.base64;
+
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+  } catch {
+    throw new Error("Invalid image data. Please try selecting the file again.");
+  }
+
   if (bytes.byteLength > MAX_IMAGE_BYTES) {
     throw new Error("Image is too large (max 5MB).");
   }
 
   const supabase = getSupabase();
+
+  // Auto-create bucket if it doesn't exist yet (service-role can always do this)
+  await supabase.storage.createBucket("project-images", { public: true }).catch(() => undefined); // silently ignore "already exists" error
+
   const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `${crypto.randomUUID()}-${safeName}`;
   const { error } = await supabase.storage
     .from("project-images")
     .upload(path, bytes, { contentType: input.contentType, upsert: false });
-  if (error) throw error;
+
+  if (error) throw new Error(`Image upload failed: ${error.message}`);
 
   const { data } = supabase.storage.from("project-images").getPublicUrl(path);
   return data.publicUrl;
 }
 
+// ---- Projects ----
+
 export async function createProjectRecord(input: {
+  userId: string;
   prompt: string;
   category: string;
   palette: string;
@@ -87,6 +112,7 @@ export async function createProjectRecord(input: {
   const { data: project, error } = await supabase
     .from("projects")
     .insert({
+      user_id: input.userId,
       name,
       prompt: input.prompt,
       category: input.category,
@@ -110,6 +136,7 @@ export async function createProjectRecord(input: {
 
   await supabase.from("project_versions").insert({
     project_id: projectRow.id,
+    user_id: input.userId,
     label: "Initial generation",
     author: "AI",
     html_snapshot: input.html,
@@ -118,6 +145,8 @@ export async function createProjectRecord(input: {
   return projectRow;
 }
 
+// getProject does NOT filter by userId — ownership is validated at the server-fn level
+// before this is called. This lets admins and the sites/$id route also access projects.
 export async function getProject(id: string) {
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -130,11 +159,12 @@ export async function getProject(id: string) {
   return data as ProjectRow;
 }
 
-export async function listProjects() {
+export async function listProjects(userId: string) {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("projects")
     .select()
+    .eq("user_id", userId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
   if (error) throw error;
@@ -181,17 +211,19 @@ export async function reviseProjectRecord(
   if (versionError) throw versionError;
 }
 
-export async function deployProjectRecord(projectId: string) {
+export async function deployProjectRecord(projectId: string, userId: string) {
   const supabase = getSupabase();
   const url = `/sites/${projectId}`;
   const { error: updateError } = await supabase
     .from("projects")
     .update({ status: "live", url })
-    .eq("id", projectId);
+    .eq("id", projectId)
+    .eq("user_id", userId);
   if (updateError) throw updateError;
 
   const { error: deployError } = await supabase.from("deployments").insert({
     project_id: projectId,
+    user_id: userId,
     env: "production",
     status: "success",
     target: "lumen",
@@ -204,35 +236,41 @@ export async function deployProjectRecord(projectId: string) {
 
 // ---- Trash ----
 
-export async function listTrashedProjects() {
+export async function listTrashedProjects(userId: string) {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("projects")
     .select()
+    .eq("user_id", userId)
     .not("deleted_at", "is", null)
     .order("deleted_at", { ascending: false });
   if (error) throw error;
   return data as ProjectRow[];
 }
 
-export async function softDeleteProject(id: string) {
+export async function softDeleteProject(id: string, userId: string) {
   const supabase = getSupabase();
   const { error } = await supabase
     .from("projects")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", userId);
   if (error) throw error;
 }
 
-export async function restoreProject(id: string) {
+export async function restoreProject(id: string, userId: string) {
   const supabase = getSupabase();
-  const { error } = await supabase.from("projects").update({ deleted_at: null }).eq("id", id);
+  const { error } = await supabase
+    .from("projects")
+    .update({ deleted_at: null })
+    .eq("id", id)
+    .eq("user_id", userId);
   if (error) throw error;
 }
 
-export async function deleteProjectForever(id: string) {
+export async function deleteProjectForever(id: string, userId: string) {
   const supabase = getSupabase();
-  const { error } = await supabase.from("projects").delete().eq("id", id);
+  const { error } = await supabase.from("projects").delete().eq("id", id).eq("user_id", userId);
   if (error) throw error;
 }
 
@@ -240,16 +278,41 @@ export async function deleteProjectForever(id: string) {
 
 export type SettingsRow = Database["public"]["Tables"]["settings"]["Row"];
 
-export async function getSettings() {
+const DEFAULT_SETTINGS = {
+  dark_mode: true,
+  reduce_motion: false,
+  compact_density: false,
+  autosave: true,
+  show_grid: false,
+  format_on_save: true,
+  email_on_deploy_fail: true,
+  weekly_digest: false,
+};
+
+export async function getSettings(userId: string) {
   const supabase = getSupabase();
-  const { data, error } = await supabase.from("settings").select().eq("id", 1).single();
+  const { data, error } = await supabase.from("settings").select().eq("user_id", userId).single();
+
+  if (error?.code === "PGRST116") {
+    // No row yet — create defaults for this user
+    const { data: newRow, error: insertError } = await supabase
+      .from("settings")
+      .insert({ user_id: userId, ...DEFAULT_SETTINGS })
+      .select()
+      .single();
+    if (insertError) throw insertError;
+    return newRow as SettingsRow;
+  }
   if (error) throw error;
   return data as SettingsRow;
 }
 
-export async function updateSettings(patch: Partial<Omit<SettingsRow, "id">>) {
+export async function updateSettings(
+  userId: string,
+  patch: Partial<Omit<SettingsRow, "id" | "user_id">>,
+) {
   const supabase = getSupabase();
-  const { error } = await supabase.from("settings").update(patch).eq("id", 1);
+  const { error } = await supabase.from("settings").update(patch).eq("user_id", userId);
   if (error) throw error;
 }
 
@@ -257,16 +320,36 @@ export async function updateSettings(patch: Partial<Omit<SettingsRow, "id">>) {
 
 export type ProfileRow = Database["public"]["Tables"]["profile"]["Row"];
 
-export async function getProfile() {
+export async function getProfile(userId: string) {
   const supabase = getSupabase();
-  const { data, error } = await supabase.from("profile").select().eq("id", 1).single();
+  const { data, error } = await supabase.from("profile").select().eq("user_id", userId).single();
+
+  if (error?.code === "PGRST116") {
+    const { data: newRow, error: insertError } = await supabase
+      .from("profile")
+      .insert({
+        user_id: userId,
+        full_name: "",
+        email: "",
+        username: "",
+        role: "",
+        bio: "",
+      })
+      .select()
+      .single();
+    if (insertError) throw insertError;
+    return newRow as ProfileRow;
+  }
   if (error) throw error;
   return data as ProfileRow;
 }
 
-export async function updateProfile(patch: Partial<Omit<ProfileRow, "id">>) {
+export async function updateProfile(
+  userId: string,
+  patch: Partial<Omit<ProfileRow, "id" | "user_id">>,
+) {
   const supabase = getSupabase();
-  const { error } = await supabase.from("profile").update(patch).eq("id", 1);
+  const { error } = await supabase.from("profile").update(patch).eq("user_id", userId);
   if (error) throw error;
 }
 
@@ -274,31 +357,32 @@ export async function updateProfile(patch: Partial<Omit<ProfileRow, "id">>) {
 
 export type ApiKeyRow = Database["public"]["Tables"]["api_keys"]["Row"];
 
-export async function listApiKeys() {
+export async function listApiKeys(userId: string) {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("api_keys")
     .select()
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data as ApiKeyRow[];
 }
 
-export async function createApiKey(label: string) {
+export async function createApiKey(userId: string, label: string) {
   const supabase = getSupabase();
   const key_value = `k_live_${crypto.randomUUID().replace(/-/g, "")}`;
   const { data, error } = await supabase
     .from("api_keys")
-    .insert({ label, key_value })
+    .insert({ user_id: userId, label, key_value })
     .select()
     .single();
   if (error) throw error;
   return data as ApiKeyRow;
 }
 
-export async function deleteApiKey(id: string) {
+export async function deleteApiKey(id: string, userId: string) {
   const supabase = getSupabase();
-  const { error } = await supabase.from("api_keys").delete().eq("id", id);
+  const { error } = await supabase.from("api_keys").delete().eq("id", id).eq("user_id", userId);
   if (error) throw error;
 }
 
@@ -306,11 +390,12 @@ export async function deleteApiKey(id: string) {
 
 export type WorkspaceMemberRow = Database["public"]["Tables"]["workspace_members"]["Row"];
 
-export async function listWorkspaceMembers() {
+export async function listWorkspaceMembers(userId: string) {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("workspace_members")
     .select()
+    .eq("user_id", userId)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return data as WorkspaceMemberRow[];
@@ -323,25 +408,28 @@ const MEMBER_GRADIENTS = [
   "from-fuchsia-400 to-purple-500",
 ];
 
-export async function addWorkspaceMember(input: {
-  name: string;
-  email: string;
-  role: "Owner" | "Editor" | "Viewer";
-}) {
+export async function addWorkspaceMember(
+  userId: string,
+  input: { name: string; email: string; role: "Owner" | "Editor" | "Viewer" },
+) {
   const supabase = getSupabase();
   const avatar_gradient = MEMBER_GRADIENTS[Math.floor(Math.random() * MEMBER_GRADIENTS.length)];
   const { data, error } = await supabase
     .from("workspace_members")
-    .insert({ ...input, avatar_gradient })
+    .insert({ user_id: userId, ...input, avatar_gradient })
     .select()
     .single();
   if (error) throw error;
   return data as WorkspaceMemberRow;
 }
 
-export async function removeWorkspaceMember(id: string) {
+export async function removeWorkspaceMember(id: string, userId: string) {
   const supabase = getSupabase();
-  const { error } = await supabase.from("workspace_members").delete().eq("id", id);
+  const { error } = await supabase
+    .from("workspace_members")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
   if (error) throw error;
 }
 
@@ -350,11 +438,12 @@ export async function removeWorkspaceMember(id: string) {
 export type DeploymentRow = Database["public"]["Tables"]["deployments"]["Row"];
 export type DeploymentWithProject = DeploymentRow & { project_name: string };
 
-export async function listDeployments(): Promise<DeploymentWithProject[]> {
+export async function listDeployments(userId: string): Promise<DeploymentWithProject[]> {
   const supabase = getSupabase();
   const { data: deployments, error } = await supabase
     .from("deployments")
     .select()
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) throw error;
 
@@ -367,21 +456,32 @@ export async function listDeployments(): Promise<DeploymentWithProject[]> {
   }));
 }
 
-// ---- Version history (global feed) ----
+// ---- Version history ----
 
 export type VersionWithProject = ProjectVersionRow & { project_name: string };
 
-export async function listAllVersions(): Promise<VersionWithProject[]> {
+export async function listAllVersions(userId: string): Promise<VersionWithProject[]> {
   const supabase = getSupabase();
+
+  // Get user's owned projects first, then query only those versions in DB
+  const { data: userProjects } = await supabase
+    .from("projects")
+    .select("id,name")
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+
+  if (!userProjects || userProjects.length === 0) return [];
+
+  const ownedIds = userProjects.map((p) => p.id);
+  const nameById = new Map(userProjects.map((p) => [p.id, p.name]));
+
   const { data: versions, error } = await supabase
     .from("project_versions")
     .select()
+    .in("project_id", ownedIds)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw error;
-
-  const projectIds = [...new Set((versions as ProjectVersionRow[]).map((v) => v.project_id))];
-  const nameById = await projectNameMap(projectIds);
 
   return (versions as ProjectVersionRow[]).map((v) => ({
     ...v,
@@ -389,15 +489,21 @@ export async function listAllVersions(): Promise<VersionWithProject[]> {
   }));
 }
 
-export async function restoreVersion(versionId: string) {
+export async function restoreVersion(versionId: string, userId: string) {
   const supabase = getSupabase();
   const { data: version, error } = await supabase
     .from("project_versions")
     .select()
     .eq("id", versionId)
     .single();
-  if (error) throw error;
+  if (error) throw new Error("Version not found");
   const row = version as ProjectVersionRow;
+
+  // Verify the version's project belongs to the requesting user
+  const project = await getProject(row.project_id);
+  if (!project || (project.user_id !== null && project.user_id !== userId)) {
+    throw new Error("Version not found");
+  }
 
   await reviseProjectRecord(row.project_id, row.html_snapshot, `Restored: ${row.label}`);
 }
@@ -409,7 +515,7 @@ async function projectNameMap(projectIds: string[]) {
   return new Map((projects ?? []).map((p) => [p.id, p.name]));
 }
 
-// ---- Dashboard stats ----
+// ---- Dashboard stats (per-user) ----
 
 export type DashboardStats = {
   projects: number;
@@ -418,12 +524,16 @@ export type DashboardStats = {
   statusCounts: Record<"live" | "draft" | "building" | "error", number>;
 };
 
-export async function getDashboardStats(): Promise<DashboardStats> {
+export async function getDashboardStats(userId: string): Promise<DashboardStats> {
   const supabase = getSupabase();
   const [projectCountRes, deploymentCountRes, projectsRes] = await Promise.all([
-    supabase.from("projects").select("id", { count: "exact", head: true }).is("deleted_at", null),
-    supabase.from("deployments").select("id", { count: "exact", head: true }),
-    supabase.from("projects").select("visits,status").is("deleted_at", null),
+    supabase
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .is("deleted_at", null),
+    supabase.from("deployments").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("projects").select("visits,status").eq("user_id", userId).is("deleted_at", null),
   ]);
 
   const rows = projectsRes.data ?? [];
@@ -439,4 +549,240 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     visits,
     statusCounts,
   };
+}
+
+// ---- Admin functions (no user_id filter — service-role bypasses RLS) ----
+
+export type AdminStats = {
+  totalUsers: number;
+  totalProjects: number;
+  totalDeployments: number;
+  totalVisits: number;
+};
+
+export async function adminGetStats(): Promise<AdminStats> {
+  const supabase = getSupabase();
+  const [users, projects, deployments, visitsRes] = await Promise.all([
+    supabase.from("user_profiles").select("id", { count: "exact", head: true }),
+    supabase.from("projects").select("id", { count: "exact", head: true }).is("deleted_at", null),
+    supabase.from("deployments").select("id", { count: "exact", head: true }),
+    supabase.from("projects").select("visits").is("deleted_at", null),
+  ]);
+  const totalVisits = (visitsRes.data ?? []).reduce((s, p) => s + (p.visits ?? 0), 0);
+  return {
+    totalUsers: users.count ?? 0,
+    totalProjects: projects.count ?? 0,
+    totalDeployments: deployments.count ?? 0,
+    totalVisits,
+  };
+}
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  is_admin: boolean;
+  created_at: string;
+  project_count: number;
+};
+
+export async function adminListUsers(): Promise<AdminUser[]> {
+  const supabase = getSupabase();
+  const { data: profiles, error } = await supabase
+    .from("user_profiles")
+    .select()
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  // Count projects per user
+  const ids = (profiles ?? []).map((p) => p.id);
+  const { data: projectCounts } = await supabase
+    .from("projects")
+    .select("user_id")
+    .in("user_id", ids)
+    .is("deleted_at", null);
+
+  const countMap = new Map<string, number>();
+  for (const row of projectCounts ?? []) {
+    countMap.set(row.user_id!, (countMap.get(row.user_id!) ?? 0) + 1);
+  }
+
+  return (profiles ?? []).map((p) => ({
+    id: p.id,
+    email: p.email ?? "",
+    is_admin: p.is_admin,
+    created_at: p.created_at,
+    project_count: countMap.get(p.id) ?? 0,
+  }));
+}
+
+export type AdminProject = ProjectRow & { user_email: string };
+
+export async function adminListProjects(): Promise<AdminProject[]> {
+  const supabase = getSupabase();
+  const { data: projects, error } = await supabase
+    .from("projects")
+    .select()
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+
+  const userIds = [...new Set((projects ?? []).map((p) => p.user_id).filter(Boolean))] as string[];
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("id,email")
+    .in("id", userIds);
+  const emailById = new Map((profiles ?? []).map((p) => [p.id, p.email ?? ""]));
+
+  return (projects as ProjectRow[]).map((p) => ({
+    ...p,
+    user_email: emailById.get(p.user_id ?? "") ?? "—",
+  }));
+}
+
+export async function adminToggleAdmin(userId: string, isAdmin: boolean) {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ is_admin: isAdmin })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+// ---- Plans & daily usage ----
+
+export const PLAN_DAILY_LIMIT_USD = {
+  free: 0.1, // $0.10/day
+  paid: 3.5, // $3.50/day
+} as const;
+
+export type PlanType = "free" | "paid";
+
+export type UserPlan = {
+  plan_type: PlanType;
+  plan_expires_at: string | null;
+  daily_cost_usd: number;
+  daily_limit_usd: number;
+  usage_pct: number; // 0–100
+  limit_reached: boolean;
+  is_paid_active: boolean;
+};
+
+function todayDateStr() {
+  return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+}
+
+export async function getUserPlan(userId: string): Promise<UserPlan> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("plan_type,plan_expires_at,daily_cost_usd,daily_reset_date")
+    .eq("id", userId)
+    .single();
+  if (error) throw error;
+
+  const today = todayDateStr();
+  let dailyCost = data.daily_cost_usd ?? 0;
+
+  // Reset counter if it's a new day
+  if ((data.daily_reset_date ?? "") < today) {
+    await supabase
+      .from("user_profiles")
+      .update({ daily_cost_usd: 0, daily_reset_date: today })
+      .eq("id", userId);
+    dailyCost = 0;
+  }
+
+  // Check if paid plan has expired → downgrade to free
+  const isPaidActive =
+    data.plan_type === "paid" &&
+    (!data.plan_expires_at || new Date(data.plan_expires_at) > new Date());
+
+  const effectivePlan: PlanType = isPaidActive ? "paid" : "free";
+  const limit = PLAN_DAILY_LIMIT_USD[effectivePlan];
+  const usagePct = Math.min(100, Math.round((dailyCost / limit) * 100));
+
+  return {
+    plan_type: effectivePlan,
+    plan_expires_at: data.plan_expires_at,
+    daily_cost_usd: dailyCost,
+    daily_limit_usd: limit,
+    usage_pct: usagePct,
+    limit_reached: dailyCost >= limit,
+    is_paid_active: isPaidActive,
+  };
+}
+
+// Step 1: Check limit BEFORE the OpenAI call (throws immediately if at limit).
+export async function checkDailyLimit(userId: string): Promise<{
+  currentCost: number;
+  limit: number;
+  isPaidActive: boolean;
+}> {
+  const supabase = getSupabase();
+  const today = todayDateStr();
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("plan_type,plan_expires_at,daily_cost_usd,daily_reset_date")
+    .eq("id", userId)
+    .single();
+  if (error) throw error;
+
+  let currentCost = data.daily_cost_usd ?? 0;
+  if ((data.daily_reset_date ?? "") < today) {
+    currentCost = 0;
+    await supabase
+      .from("user_profiles")
+      .update({ daily_cost_usd: 0, daily_reset_date: today })
+      .eq("id", userId);
+  }
+
+  const isPaidActive =
+    data.plan_type === "paid" &&
+    (!data.plan_expires_at || new Date(data.plan_expires_at) > new Date());
+  const limit = PLAN_DAILY_LIMIT_USD[isPaidActive ? "paid" : "free"];
+
+  if (currentCost >= limit) {
+    const planName = isPaidActive ? "Pro" : "Free";
+    const hint = isPaidActive
+      ? "Your daily limit resets at midnight."
+      : "Upgrade to Pro for more, or wait for the free limit to reset at midnight.";
+    throw new Error(`You've reached today's ${planName} plan usage limit. ${hint}`);
+  }
+
+  return { currentCost, limit, isPaidActive };
+}
+
+// Step 2: Record the actual cost AFTER the OpenAI call succeeds.
+export async function recordDailyUsage(userId: string, costUsd: number): Promise<void> {
+  const supabase = getSupabase();
+  const today = todayDateStr();
+
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("daily_cost_usd,daily_reset_date")
+    .eq("id", userId)
+    .single();
+
+  const currentCost = (data?.daily_reset_date ?? "") < today ? 0 : (data?.daily_cost_usd ?? 0);
+
+  await supabase
+    .from("user_profiles")
+    .update({ daily_cost_usd: currentCost + costUsd, daily_reset_date: today })
+    .eq("id", userId);
+}
+
+export async function upgradeToPaid(userId: string, razorpayOrderId: string): Promise<void> {
+  const supabase = getSupabase();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({
+      plan_type: "paid",
+      plan_expires_at: expiresAt,
+      razorpay_order_id: razorpayOrderId,
+    })
+    .eq("id", userId);
+  if (error) throw error;
 }

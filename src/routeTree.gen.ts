@@ -10,15 +10,22 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SitesIdRouteImport } from './routes/sites.$id'
+import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminProjectsRouteImport } from './routes/admin.projects'
+import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
 import { Route as AppTrashRouteImport } from './routes/_app.trash'
 import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
+import { Route as AppPlansRouteImport } from './routes/_app.plans'
 import { Route as AppNewRouteImport } from './routes/_app.new'
 import { Route as AppHistoryRouteImport } from './routes/_app.history'
 import { Route as AppDeploymentsRouteImport } from './routes/_app.deployments'
@@ -29,6 +36,16 @@ import { Route as AppProjectsIdRouteImport } from './routes/_app.projects.$id'
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -44,6 +61,26 @@ const SitesIdRoute = SitesIdRouteImport.update({
   id: '/sites/$id',
   path: '/sites/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth_/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminProjectsRoute = AdminProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
   id: '/workspace',
@@ -73,6 +110,11 @@ const AppProjectsRoute = AppProjectsRouteImport.update({
 const AppProfileRoute = AppProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPlansRoute = AppPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
   getParentRoute: () => AppRoute,
 } as any)
 const AppNewRoute = AppNewRouteImport.update({
@@ -108,35 +150,49 @@ const AppProjectsIdRoute = AppProjectsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api-keys': typeof AppApiKeysRoute
   '/dashboard': typeof AppDashboardRoute
   '/deployments': typeof AppDeploymentsRoute
   '/history': typeof AppHistoryRoute
   '/new': typeof AppNewRoute
+  '/plans': typeof AppPlansRoute
   '/profile': typeof AppProfileRoute
   '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRoute
   '/templates': typeof AppTemplatesRoute
   '/trash': typeof AppTrashRoute
   '/workspace': typeof AppWorkspaceRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/projects': typeof AdminProjectsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/sites/$id': typeof SitesIdRoute
   '/projects/$id': typeof AppProjectsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api-keys': typeof AppApiKeysRoute
   '/dashboard': typeof AppDashboardRoute
   '/deployments': typeof AppDeploymentsRoute
   '/history': typeof AppHistoryRoute
   '/new': typeof AppNewRoute
+  '/plans': typeof AppPlansRoute
   '/profile': typeof AppProfileRoute
   '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRoute
   '/templates': typeof AppTemplatesRoute
   '/trash': typeof AppTrashRoute
   '/workspace': typeof AppWorkspaceRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/projects': typeof AdminProjectsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/sites/$id': typeof SitesIdRoute
   '/projects/$id': typeof AppProjectsIdRoute
 }
@@ -144,18 +200,25 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/admin': typeof AdminRouteWithChildren
+  '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_app/api-keys': typeof AppApiKeysRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/deployments': typeof AppDeploymentsRoute
   '/_app/history': typeof AppHistoryRoute
   '/_app/new': typeof AppNewRoute
+  '/_app/plans': typeof AppPlansRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/projects': typeof AppProjectsRouteWithChildren
   '/_app/settings': typeof AppSettingsRoute
   '/_app/templates': typeof AppTemplatesRoute
   '/_app/trash': typeof AppTrashRoute
   '/_app/workspace': typeof AppWorkspaceRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/projects': typeof AdminProjectsRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/auth_/callback': typeof AuthCallbackRoute
   '/sites/$id': typeof SitesIdRoute
   '/_app/projects/$id': typeof AppProjectsIdRoute
 }
@@ -163,53 +226,74 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
+    | '/auth'
     | '/sitemap.xml'
     | '/api-keys'
     | '/dashboard'
     | '/deployments'
     | '/history'
     | '/new'
+    | '/plans'
     | '/profile'
     | '/projects'
     | '/settings'
     | '/templates'
     | '/trash'
     | '/workspace'
+    | '/admin/dashboard'
+    | '/admin/projects'
+    | '/admin/users'
+    | '/auth/callback'
     | '/sites/$id'
     | '/projects/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
+    | '/auth'
     | '/sitemap.xml'
     | '/api-keys'
     | '/dashboard'
     | '/deployments'
     | '/history'
     | '/new'
+    | '/plans'
     | '/profile'
     | '/projects'
     | '/settings'
     | '/templates'
     | '/trash'
     | '/workspace'
+    | '/admin/dashboard'
+    | '/admin/projects'
+    | '/admin/users'
+    | '/auth/callback'
     | '/sites/$id'
     | '/projects/$id'
   id:
     | '__root__'
     | '/'
     | '/_app'
+    | '/admin'
+    | '/auth'
     | '/sitemap.xml'
     | '/_app/api-keys'
     | '/_app/dashboard'
     | '/_app/deployments'
     | '/_app/history'
     | '/_app/new'
+    | '/_app/plans'
     | '/_app/profile'
     | '/_app/projects'
     | '/_app/settings'
     | '/_app/templates'
     | '/_app/trash'
     | '/_app/workspace'
+    | '/admin/dashboard'
+    | '/admin/projects'
+    | '/admin/users'
+    | '/auth_/callback'
     | '/sites/$id'
     | '/_app/projects/$id'
   fileRoutesById: FileRoutesById
@@ -217,7 +301,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  AdminRoute: typeof AdminRouteWithChildren
+  AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   SitesIdRoute: typeof SitesIdRoute
 }
 
@@ -228,6 +315,20 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -250,6 +351,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/sites/$id'
       preLoaderRoute: typeof SitesIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/auth_/callback': {
+      id: '/auth_/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/projects': {
+      id: '/admin/projects'
+      path: '/projects'
+      fullPath: '/admin/projects'
+      preLoaderRoute: typeof AdminProjectsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/dashboard': {
+      id: '/admin/dashboard'
+      path: '/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/_app/workspace': {
       id: '/_app/workspace'
@@ -291,6 +420,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/plans': {
+      id: '/_app/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof AppPlansRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/new': {
@@ -356,6 +492,7 @@ interface AppRouteChildren {
   AppDeploymentsRoute: typeof AppDeploymentsRoute
   AppHistoryRoute: typeof AppHistoryRoute
   AppNewRoute: typeof AppNewRoute
+  AppPlansRoute: typeof AppPlansRoute
   AppProfileRoute: typeof AppProfileRoute
   AppProjectsRoute: typeof AppProjectsRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRoute
@@ -370,6 +507,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDeploymentsRoute: AppDeploymentsRoute,
   AppHistoryRoute: AppHistoryRoute,
   AppNewRoute: AppNewRoute,
+  AppPlansRoute: AppPlansRoute,
   AppProfileRoute: AppProfileRoute,
   AppProjectsRoute: AppProjectsRouteWithChildren,
   AppSettingsRoute: AppSettingsRoute,
@@ -380,10 +518,27 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface AdminRouteChildren {
+  AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminProjectsRoute: typeof AdminProjectsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminDashboardRoute: AdminDashboardRoute,
+  AdminProjectsRoute: AdminProjectsRoute,
+  AdminUsersRoute: AdminUsersRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  AdminRoute: AdminRouteWithChildren,
+  AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   SitesIdRoute: SitesIdRoute,
 }
 export const routeTree = rootRouteImport

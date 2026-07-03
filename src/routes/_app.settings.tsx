@@ -10,7 +10,7 @@ export const Route = createFileRoute("/_app/settings")({
   component: Settings,
 });
 
-type Field = keyof Omit<SettingsRow, "id">;
+type Field = keyof Omit<SettingsRow, "id" | "user_id">;
 
 function Toggle({
   on,

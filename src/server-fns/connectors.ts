@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireUser } from "@/lib/auth-server";
-import { listConnectors, upsertConnector, deleteConnector } from "@/lib/db";
+import { listConnectors, upsertConnector, deleteConnector, getProject } from "@/lib/db";
 
 // ---- List all connectors for the current user ----
 export const fetchConnectors = createServerFn({ method: "GET" }).handler(async () => {
@@ -185,5 +185,66 @@ export const exchangeConnectorCode = createServerFn({ method: "POST" })
       return { ok: false, error: `Unknown provider: ${provider}` };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "OAuth exchange failed." };
+    }
+  });
+
+// ---- Deploy a project directly to Vercel ----
+export const deployToVercel = createServerFn({ method: "POST" })
+  .validator((d: { projectId: string }) => d)
+  .handler(async ({ data }): Promise<{ ok: true; url: string; error: null } | { ok: false; error: string }> => {
+    try {
+      const user = await requireUser();
+
+      // Get Vercel token from stored connector
+      const connectors = await listConnectors(user.id);
+      const vercel = connectors.find((c) => c.provider === "vercel");
+      if (!vercel?.access_token) {
+        return { ok: false, error: "Vercel is not connected. Go to Connectors and connect Vercel first." };
+      }
+
+      // Get project HTML
+      const project = await getProject(data.projectId);
+      if (!project) return { ok: false, error: "Project not found." };
+
+      // Sanitise name for Vercel (lowercase, alphanumeric + hyphens, max 52 chars)
+      const name = project.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 52) || "lumen-site";
+
+      // Create Vercel deployment via API v13
+      const res = await fetch("https://api.vercel.com/v13/deployments", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${vercel.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          files: [
+            {
+              file: "index.html",
+              data: project.generated_html,
+              encoding: "utf-8",
+            },
+          ],
+          target: "production",
+          projectSettings: { framework: null },
+        }),
+      });
+
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: { message?: string } };
+        return { ok: false, error: body?.error?.message ?? `Vercel returned HTTP ${res.status}.` };
+      }
+
+      const body = (await res.json()) as { url?: string; readyState?: string };
+      const deployUrl = body.url ? `https://${body.url}` : null;
+      if (!deployUrl) return { ok: false, error: "Vercel did not return a deployment URL." };
+
+      return { ok: true, url: deployUrl, error: null };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Vercel deployment failed." };
     }
   });

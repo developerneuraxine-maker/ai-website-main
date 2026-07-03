@@ -12,16 +12,23 @@ import {
   Code2,
   Eye,
   ExternalLink,
+  Triangle,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { Chip } from "@/components/ui-bits";
 import { fetchProjectDetail, reviseProject, deployProject } from "@/server-fns/projects";
+import { fetchConnectors, deployToVercel } from "@/server-fns/connectors";
 import type { ProjectMessageRow, ProjectRow } from "@/lib/db";
 
 export const Route = createFileRoute("/_app/projects/$id")({
   loader: async ({ params }) => {
-    const result = await fetchProjectDetail({ data: { id: params.id } });
+    const [result, connectors] = await Promise.all([
+      fetchProjectDetail({ data: { id: params.id } }),
+      fetchConnectors().catch(() => []),
+    ]);
     if (!result) throw notFound();
-    return result;
+    return { ...result, connectors };
   },
   head: ({ loaderData }) => ({
     meta: [{ title: `${loaderData?.project.name ?? "Project"} · Lumen` }],
@@ -60,7 +67,7 @@ function toMsg(row: ProjectMessageRow): Msg {
 }
 
 function Editor() {
-  const { project: initialProject, messages: initialMessages } = Route.useLoaderData();
+  const { project: initialProject, messages: initialMessages, connectors } = Route.useLoaderData();
   const [project, setProject] = useState<ProjectRow>(initialProject);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [mode, setMode] = useState<"preview" | "code">("preview");
@@ -68,6 +75,10 @@ function Editor() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [deploying, setDeploying] = useState(false);
+  const [vercelDeploying, setVercelDeploying] = useState(false);
+  const [vercelResult, setVercelResult] = useState<{ url: string } | { error: string } | null>(null);
+
+  const hasVercel = connectors.some((c) => c.provider === "vercel");
 
   const send = async () => {
     if (!draft.trim() || sending) return;
@@ -104,6 +115,24 @@ function Editor() {
     }
   };
 
+  const deployViaVercel = async () => {
+    if (vercelDeploying) return;
+    setVercelDeploying(true);
+    setVercelResult(null);
+    try {
+      const res = await deployToVercel({ data: { projectId: project.id } });
+      if (res.ok) {
+        setVercelResult({ url: res.url });
+      } else {
+        setVercelResult({ error: res.error });
+      }
+    } catch (e) {
+      setVercelResult({ error: e instanceof Error ? e.message : "Deployment failed." });
+    } finally {
+      setVercelDeploying(false);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       {/* Project header */}
@@ -132,6 +161,20 @@ function Editor() {
               <ExternalLink className="h-3.5 w-3.5" /> Open
             </a>
           )}
+
+          {/* Deploy to Vercel button — only when Vercel connector is active */}
+          {hasVercel && (
+            <button
+              onClick={deployViaVercel}
+              disabled={vercelDeploying}
+              className="inline-flex items-center gap-1.5 rounded-full border border-black bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+              title="Deploy to Vercel"
+            >
+              <Triangle className="h-3 w-3 fill-white" />
+              {vercelDeploying ? "Deploying…" : "Deploy to Vercel"}
+            </button>
+          )}
+
           <button
             onClick={deploy}
             disabled={deploying}
@@ -141,6 +184,41 @@ function Editor() {
           </button>
         </div>
       </div>
+
+      {/* Vercel deploy result banner */}
+      {vercelResult && (
+        <div className={`flex items-center gap-3 border-b px-4 py-2.5 text-sm ${
+          "url" in vercelResult
+            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+            : "border-red-500/20 bg-red-500/10 text-red-400"
+        }`}>
+          {"url" in vercelResult ? (
+            <>
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>Deployed to Vercel!</span>
+              <a
+                href={vercelResult.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 font-medium underline underline-offset-2"
+              >
+                {vercelResult.url} <ExternalLink className="h-3 w-3" />
+              </a>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {vercelResult.error}
+            </>
+          )}
+          <button
+            onClick={() => setVercelResult(null)}
+            className="ml-auto text-current opacity-60 hover:opacity-100"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Split */}
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[380px_1fr]">

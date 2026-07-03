@@ -188,6 +188,92 @@ export const exchangeConnectorCode = createServerFn({ method: "POST" })
     }
   });
 
+// ---- Push a project's HTML to a GitHub repo ----
+export const pushToGitHub = createServerFn({ method: "POST" })
+  .validator((d: { projectId: string }) => d)
+  .handler(async ({ data }): Promise<{ ok: true; repoUrl: string; error: null } | { ok: false; error: string }> => {
+    try {
+      const user = await requireUser();
+
+      const connectors = await listConnectors(user.id);
+      const github = connectors.find((c) => c.provider === "github");
+      if (!github?.access_token) {
+        return { ok: false, error: "GitHub is not connected. Go to Connectors and connect GitHub first." };
+      }
+
+      const project = await getProject(data.projectId);
+      if (!project) return { ok: false, error: "Project not found." };
+
+      const token = github.access_token;
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      };
+
+      // Get authenticated GitHub user
+      const userRes = await fetch("https://api.github.com/user", { headers });
+      if (!userRes.ok) return { ok: false, error: "GitHub token is invalid or expired. Reconnect GitHub in Connectors." };
+      const ghUser = (await userRes.json()) as { login: string };
+      const owner = ghUser.login;
+
+      // Sanitise repo name
+      const repoName = project.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 100) || "lumen-site";
+
+      // Create repo (silently ignore 422 = already exists)
+      await fetch("https://api.github.com/user/repos", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: repoName,
+          description: project.prompt.slice(0, 150),
+          auto_init: false,
+          private: false,
+        }),
+      });
+
+      // Get current file SHA so we can update (not create) if file already exists
+      const existingRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repoName}/contents/index.html`,
+        { headers },
+      );
+      let sha: string | undefined;
+      if (existingRes.ok) {
+        const existing = (await existingRes.json()) as { sha?: string };
+        sha = existing.sha;
+      }
+
+      // Push index.html (base64-encoded)
+      const content = Buffer.from(project.generated_html).toString("base64");
+      const pushRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repoName}/contents/index.html`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            message: "Update site from Lumen",
+            content,
+            ...(sha ? { sha } : {}),
+          }),
+        },
+      );
+
+      if (!pushRes.ok) {
+        const err = (await pushRes.json()) as { message?: string };
+        return { ok: false, error: err.message ?? `GitHub returned HTTP ${pushRes.status}.` };
+      }
+
+      return { ok: true, repoUrl: `https://github.com/${owner}/${repoName}`, error: null };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "GitHub push failed." };
+    }
+  });
+
 // ---- Deploy a project directly to Vercel ----
 export const deployToVercel = createServerFn({ method: "POST" })
   .validator((d: { projectId: string }) => d)

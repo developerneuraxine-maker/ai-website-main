@@ -1,15 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles, ArrowRight, Loader2, Wand2, Upload, X, Plus,
-  Globe, ChevronDown, Check,
+  Globe, ChevronDown, Check, Mic, MicOff, MessageSquare,
 } from "lucide-react";
 import { templates } from "@/lib/mock-data";
 import { styleReferences } from "@/lib/style-references";
 import { createProject } from "@/server-fns/projects";
 import { uploadImage } from "@/server-fns/uploads";
 import { enhancePrompt } from "@/server-fns/enhance-prompt";
+import { clarifyPrompt } from "@/server-fns/clarify-prompt";
+import type { ClarificationQuestion } from "@/lib/openai";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -203,6 +205,204 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+// ─── Voice Input Hook (Web Speech API) ───────────────────────────────────────
+function useVoiceInput(onResult: (text: string) => void) {
+  const [listening, setListening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const recognitionRef = useRef<unknown>(null);
+
+  const supported =
+    typeof window !== "undefined" &&
+    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  const stop = useCallback(() => {
+    if (recognitionRef.current) {
+      (recognitionRef.current as { stop: () => void }).stop();
+      recognitionRef.current = null;
+    }
+    setListening(false);
+  }, []);
+
+  const start = useCallback(() => {
+    if (!supported) {
+      setError("Voice input not supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+    setError(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRecognition = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    const rec = new SpeechRecognition();
+    rec.lang = "en-US";
+    rec.continuous = false;
+    rec.interimResults = false;
+
+    rec.onstart = () => setListening(true);
+    rec.onresult = (e: { results: { [n: number]: { [n: number]: { transcript: string } } } }) => {
+      const transcript = e.results[0]?.[0]?.transcript ?? "";
+      if (transcript) onResult(transcript);
+      stop();
+    };
+    rec.onerror = (e: { error: string }) => {
+      if (e.error === "not-allowed") setError("Microphone access denied. Allow it in browser settings.");
+      else if (e.error !== "aborted") setError("Voice recognition error. Try again.");
+      setListening(false);
+    };
+    rec.onend = () => setListening(false);
+
+    recognitionRef.current = rec;
+    rec.start();
+  }, [supported, onResult, stop]);
+
+  const toggle = useCallback(() => {
+    if (listening) stop();
+    else start();
+  }, [listening, start, stop]);
+
+  return { listening, toggle, supported, error, clearError: () => setError(null) };
+}
+
+// ─── Clarification Modal ──────────────────────────────────────────────────────
+export type Answers = Record<string, { selected: string; custom: string }>;
+
+function ClarificationModal({
+  questions,
+  onSubmit,
+  onSkip,
+}: {
+  questions: ClarificationQuestion[];
+  onSubmit: (answers: Answers) => void;
+  onSkip: () => void;
+}) {
+  const [answers, setAnswers] = useState<Answers>(() =>
+    Object.fromEntries(questions.map((q) => [q.id, { selected: "", custom: "" }])),
+  );
+
+  const setSelected = (qid: string, opt: string) =>
+    setAnswers((prev) => ({ ...prev, [qid]: { selected: opt, custom: "" } }));
+
+  const setCustom = (qid: string, text: string) =>
+    setAnswers((prev) => ({ ...prev, [qid]: { ...prev[qid], custom: text } }));
+
+  const OTHER = "Other — describe below";
+  const allAnswered = questions.every((q) => {
+    const a = answers[q.id];
+    if (!a?.selected) return false;
+    if (a.selected === OTHER && !a.custom.trim()) return false;
+    return true;
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onSkip}
+      />
+
+      {/* Modal */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 8 }}
+        transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+        className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-background shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <MessageSquare className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm">A few quick questions</p>
+            <p className="text-xs text-muted-foreground">Help us build exactly what you need</p>
+          </div>
+          <button
+            onClick={onSkip}
+            className="ml-auto text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Questions */}
+        <div className="space-y-5 px-6 py-5">
+          {questions.map((q, qi) => (
+            <div key={q.id}>
+              <p className="mb-2.5 text-sm font-medium">
+                <span className="mr-1.5 font-mono text-[10px] text-muted-foreground">{qi + 1}.</span>
+                {q.question}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {q.options.map((opt) => {
+                  const isOther = opt === OTHER;
+                  const selected = answers[q.id]?.selected === opt;
+                  return (
+                    <button
+                      key={opt}
+                      onClick={() => setSelected(q.id, opt)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                        selected
+                          ? "border-primary bg-primary/10 text-primary"
+                          : isOther
+                          ? "border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                      }`}
+                    >
+                      {selected && !isOther && <Check className="mr-1 inline h-3 w-3" />}
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom "Other" input */}
+              <AnimatePresence>
+                {answers[q.id]?.selected === OTHER && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                    animate={{ opacity: 1, height: "auto", marginTop: 8 }}
+                    exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="overflow-hidden"
+                  >
+                    <input
+                      autoFocus
+                      value={answers[q.id]?.custom ?? ""}
+                      onChange={(e) => setCustom(q.id, e.target.value)}
+                      placeholder="Describe your answer…"
+                      className="w-full rounded-lg border border-primary/40 bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-border px-6 py-4">
+          <button
+            onClick={onSkip}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Skip and generate anyway
+          </button>
+          <button
+            onClick={() => onSubmit(answers)}
+            disabled={!allAnswered}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
+          >
+            Build it <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Route ───────────────────────────────────────────────────────────────────
 export const Route = createFileRoute("/_app/new")({
   validateSearch: (search: Record<string, unknown>): { template?: string; prompt?: string } => {
@@ -253,8 +453,19 @@ function NewProject() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Clarification questions
+  const [clarifying, setClarifying] = useState(false);
+  const [clarifyQuestions, setClarifyQuestions] = useState<ClarificationQuestion[] | null>(null);
+  const [pendingGenerateData, setPendingGenerateData] = useState<Parameters<typeof createProject>[0]["data"] | null>(null);
+
   const anyUploading = images.some((img) => img.uploading);
   const activePrompt = enhancedPrompt ?? prompt;
+
+  // Voice input
+  const voiceInput = useVoiceInput((transcript) => {
+    setPrompt((prev) => (prev.trim() ? `${prev} ${transcript}` : transcript));
+    if (enhancedPrompt) setEnhancedPrompt(null);
+  });
 
   // ── Image upload ──────────────────────────────────────────────────────────
   const onSelectImages = async (files: FileList | null) => {
@@ -309,15 +520,14 @@ function NewProject() {
     }
   };
 
-  // ── Generate ──────────────────────────────────────────────────────────────
-  const generate = async () => {
-    if (!activePrompt.trim() || generating || anyUploading) return;
+  // ── Core generation (after clarification or directly) ──────────────────────
+  const runGenerate = async (finalPrompt: string) => {
     setGenerating(true);
     setError(null);
     try {
       const { id } = await createProject({
         data: {
-          prompt: activePrompt,
+          prompt: finalPrompt,
           category,
           palette,
           theme,
@@ -336,11 +546,71 @@ function NewProject() {
     }
   };
 
+  // ── Handle clarification answers → enrich prompt and generate ──────────────
+  const handleClarificationSubmit = async (answers: Answers) => {
+    setClarifyQuestions(null);
+    if (!pendingGenerateData) return;
+
+    // Merge answers into the prompt
+    const parts: string[] = [pendingGenerateData.prompt];
+    if (clarifyQuestions) {
+      for (const q of clarifyQuestions) {
+        const a = answers[q.id];
+        if (!a?.selected) continue;
+        const value = a.selected === "Other — describe below" ? a.custom : a.selected;
+        if (value.trim()) parts.push(`${q.question}: ${value}`);
+      }
+    }
+    const enrichedPrompt = parts.join(". ");
+    await runGenerate(enrichedPrompt);
+  };
+
+  // ── Generate: check clarification first ────────────────────────────────────
+  const generate = async () => {
+    if (!activePrompt.trim() || generating || anyUploading) return;
+    setError(null);
+    setClarifying(true);
+    try {
+      const result = await clarifyPrompt({ data: { prompt: activePrompt } });
+      if (result.needsClarification) {
+        setPendingGenerateData({
+          prompt: activePrompt,
+          category, palette, theme, font, motion: "Cinematic", language,
+          referenceUrl: referenceUrl.trim() || undefined,
+          imageUrls: images.filter((img) => img.url).map((img) => img.url!),
+          styleReferenceId: styleRefId,
+        });
+        setClarifyQuestions(result.questions);
+        setClarifying(false);
+        return;
+      }
+    } catch {
+      // If clarification check fails, proceed with generation directly
+    } finally {
+      setClarifying(false);
+    }
+    await runGenerate(activePrompt);
+  };
+
   const LANGUAGES = ["English (US)", "French", "Japanese", "Spanish", "Hindi", "Arabic", "Portuguese", "German"];
 
   return (
     <>
       <GenerationOverlay active={generating} prompt={activePrompt} />
+
+      {/* Clarification Modal */}
+      <AnimatePresence>
+        {clarifyQuestions && !generating && (
+          <ClarificationModal
+            questions={clarifyQuestions}
+            onSubmit={handleClarificationSubmit}
+            onSkip={() => {
+              setClarifyQuestions(null);
+              if (pendingGenerateData) runGenerate(pendingGenerateData.prompt);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       <div className="mx-auto max-w-3xl px-6 py-12">
 
@@ -447,6 +717,32 @@ function NewProject() {
               )}
             </button>
 
+            {/* Mic button */}
+            {voiceInput.supported && (
+              <button
+                type="button"
+                onClick={voiceInput.toggle}
+                title={voiceInput.listening ? "Stop listening" : "Speak your prompt"}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                  voiceInput.listening
+                    ? "border-red-500/60 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                    : "border-border bg-surface text-muted-foreground hover:border-primary/40 hover:text-primary"
+                }`}
+              >
+                {voiceInput.listening ? (
+                  <>
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+                    </span>
+                    Listening…
+                  </>
+                ) : (
+                  <><Mic className="h-3 w-3" /> Voice</>
+                )}
+              </button>
+            )}
+
             {/* Reference URL */}
             <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 focus-within:border-primary/40">
               <Globe className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -470,16 +766,35 @@ function NewProject() {
             {/* Generate */}
             <button
               onClick={generate}
-              disabled={!prompt.trim() || generating || anyUploading}
+              disabled={!prompt.trim() || generating || clarifying || anyUploading}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
               {generating ? (
                 <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+              ) : clarifying ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…</>
               ) : (
                 <>Generate <ArrowRight className="h-3.5 w-3.5" /></>
               )}
             </button>
           </div>
+
+          {/* Voice error */}
+          <AnimatePresence>
+            {voiceInput.error && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="flex items-center justify-between border-t border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+                  <span><MicOff className="mr-1.5 inline h-3 w-3" />{voiceInput.error}</span>
+                  <button onClick={voiceInput.clearError}><X className="h-3 w-3" /></button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {(enhanceError || error) && (
             <div className="border-t border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">

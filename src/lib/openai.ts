@@ -216,6 +216,57 @@ Output ONLY the complete updated raw HTML document. No markdown, no commentary, 
 
 export type GenerateResult = { html: string; costUsd: number };
 
+export type ClarificationQuestion = {
+  id: string;
+  question: string;
+  options: string[]; // last option is always "Other — describe below"
+};
+
+export type ClarificationResult =
+  | { needsClarification: false }
+  | { needsClarification: true; questions: ClarificationQuestion[] };
+
+// Analyzes a prompt to decide if clarifying questions are needed before generation.
+// Uses gpt-4o-mini for speed and low cost — this runs before every generation attempt.
+export async function analyzePromptForClarification(prompt: string): Promise<ClarificationResult> {
+  const systemPrompt = `You are a website prompt analyzer. Your job: decide whether the user's website prompt is specific enough to generate a great website, or whether targeted clarifying questions would help.
+
+A prompt is SPECIFIC ENOUGH if it mentions: the website type/category AND some context (business name, purpose, target audience, features, or industry details).
+Examples of SPECIFIC ENOUGH: "A premium Italian restaurant in Mumbai called Bella Vista with online reservations and seasonal menus", "My photography portfolio showcasing landscape and wedding photos", "An e-commerce store selling handmade leather bags"
+
+A prompt NEEDS CLARIFICATION if it's vague: missing website type, missing purpose, or just a keyword with no context.
+Examples that NEED CLARIFICATION: "make a website", "I need a website", "business", "portfolio", "startup", "blue and modern"
+
+If it NEEDS CLARIFICATION, generate 2–3 SHORT targeted questions. Each question must have exactly 4 options where the last one is always "Other — describe below". Questions should be contextual to what's actually missing.
+
+Respond in JSON only. No explanation. Format:
+If specific enough: {"needsClarification": false}
+If needs clarification: {"needsClarification": true, "questions": [{"id": "q1", "question": "...", "options": ["...", "...", "...", "Other — describe below"]}, ...]}`;
+
+  const completion = await getClient().chat.completions.create({
+    model: "gpt-4o-mini",
+    max_completion_tokens: 500,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Analyze this website prompt: "${prompt}"` },
+    ],
+  });
+
+  const raw = completion.choices[0]?.message?.content?.trim() ?? "";
+  try {
+    // Extract JSON even if wrapped in markdown fences
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+    if (parsed.needsClarification === false) return { needsClarification: false };
+    if (parsed.needsClarification === true && Array.isArray(parsed.questions)) {
+      return { needsClarification: true, questions: parsed.questions };
+    }
+  } catch {
+    // If parsing fails, proceed without clarification
+  }
+  return { needsClarification: false };
+}
+
 // Expands a short prompt into a detailed website generation prompt.
 // Uses a cheaper fast model to keep cost minimal.
 export async function enhanceUserPrompt(shortPrompt: string): Promise<string> {
@@ -322,6 +373,69 @@ export function injectNeuraxineBadge(html: string): string {
   return html + NEURAXINE_BADGE;
 }
 
+export type IntegrationContext = {
+  userId: string;
+  hasGmail: boolean;
+  hasSheets: boolean;
+  hasCalendar: boolean;
+  hasRazorpay: boolean;
+};
+
+function buildIntegrationPrompt(ctx: IntegrationContext): string {
+  const base = (process.env.APP_URL ?? "https://websitebuilder.neuraxine.com").replace(/\/$/, "");
+  const lines: string[] = [
+    "════════════════════════════════════════",
+    "CONNECTOR INTEGRATIONS (use only when the request calls for it)",
+    "════════════════════════════════════════",
+    "The following API endpoints are available for this user's website.",
+    "Use fetch() to call them client-side when appropriate (contact form, booking, payment, etc.).",
+    "All endpoints accept Content-Type: application/json and return { ok: true, ... } or { ok: false, error: '...' }.",
+    "",
+  ];
+
+  if (ctx.hasGmail) {
+    lines.push(
+      `EMAIL (Gmail) → POST ${base}/api/integrate/${ctx.userId}/gmail`,
+      `  Body: { "to": "visitor@email.com", "subject": "...", "body": "..." }`,
+      `  Returns: { ok: true, messageId: "..." }`,
+      `  Use for: contact forms, newsletter signups, booking confirmations.`,
+      "",
+    );
+  }
+  if (ctx.hasSheets) {
+    lines.push(
+      `SPREADSHEET (Google Sheets) → POST ${base}/api/integrate/${ctx.userId}/sheets`,
+      `  Body: { "spreadsheetId": "YOUR_SHEET_ID", "values": ["col1", "col2", ...] }`,
+      `  Returns: { ok: true, updates: { ... } }`,
+      `  Use for: saving form submissions to a spreadsheet. Add a comment in code: // Replace YOUR_SHEET_ID with actual Google Sheets ID`,
+      "",
+    );
+  }
+  if (ctx.hasCalendar) {
+    lines.push(
+      `CALENDAR (Google Calendar) → POST ${base}/api/integrate/${ctx.userId}/calendar`,
+      `  Body: { "title": "Appointment", "start": "2024-01-15T10:00:00", "end": "2024-01-15T11:00:00", "description": "..." }`,
+      `  Returns: { ok: true, eventId: "...", htmlLink: "..." }`,
+      `  Use for: appointment booking forms, event registrations.`,
+      "",
+    );
+  }
+  if (ctx.hasRazorpay) {
+    lines.push(
+      `PAYMENT (Razorpay) → POST ${base}/api/integrate/${ctx.userId}/razorpay-order`,
+      `  Body: { "amount": 49900, "currency": "INR", "receipt": "order_001" } (amount in paise: 49900 = ₹499)`,
+      `  Returns: { ok: true, orderId: "...", amount: 49900, currency: "INR", key: "rzp_..." }`,
+      `  Use for: product purchase, service fee, donation buttons.`,
+      `  After getting the response, open the Razorpay checkout like this:`,
+      `  Load https://checkout.razorpay.com/v1/checkout.js then call:`,
+      `  new Razorpay({ key: resp.key, amount: resp.amount, currency: resp.currency, order_id: resp.orderId, handler: fn }).open()`,
+      "",
+    );
+  }
+
+  return lines.join("\n");
+}
+
 export async function generateSite(opts: {
   prompt: string;
   category: string;
@@ -333,6 +447,7 @@ export async function generateSite(opts: {
   referenceUrl?: string;
   imageUrls?: string[];
   styleReference?: { name: string; code: string };
+  integrations?: IntegrationContext;
 }): Promise<GenerateResult> {
   const userMessage = [
     `Build a stunning, award-worthy website for this request:`,
@@ -361,6 +476,12 @@ export async function generateSite(opts: {
   }
   if (opts.styleReference) {
     systemPrompt += `\n\nSTYLE REFERENCE — "${opts.styleReference.name}": The code below is from the user's own previous project. Study ONLY its visual patterns: layout rhythm, spacing scale, typography choices, color depth, card polish, shadow treatment, glassmorphism, gradients. Match or exceed that quality level. Do NOT copy any business name, copy, contact info, or images — write entirely new content.\nNote: the reference may use Tailwind v4 @theme syntax which the CDN script does NOT support. Translate values to CSS custom properties or Tailwind arbitrary-value classes instead.\n\n--- STYLE REFERENCE ---\n${opts.styleReference.code}\n--- END STYLE REFERENCE ---`;
+  }
+  if (opts.integrations) {
+    const hasAny = opts.integrations.hasGmail || opts.integrations.hasSheets || opts.integrations.hasCalendar || opts.integrations.hasRazorpay;
+    if (hasAny) {
+      systemPrompt += `\n\n${buildIntegrationPrompt(opts.integrations)}`;
+    }
   }
 
   const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [

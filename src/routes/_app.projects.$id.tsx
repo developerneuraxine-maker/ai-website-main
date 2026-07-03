@@ -15,10 +15,11 @@ import {
   Triangle,
   CheckCircle2,
   AlertCircle,
+  Github,
 } from "lucide-react";
 import { Chip } from "@/components/ui-bits";
 import { fetchProjectDetail, reviseProject, deployProject } from "@/server-fns/projects";
-import { fetchConnectors, deployToVercel } from "@/server-fns/connectors";
+import { fetchConnectors, deployToVercel, pushToGitHub } from "@/server-fns/connectors";
 import type { ProjectMessageRow, ProjectRow } from "@/lib/db";
 
 export const Route = createFileRoute("/_app/projects/$id")({
@@ -77,8 +78,11 @@ function Editor() {
   const [deploying, setDeploying] = useState(false);
   const [vercelDeploying, setVercelDeploying] = useState(false);
   const [vercelResult, setVercelResult] = useState<{ url: string } | { error: string } | null>(null);
+  const [githubPushing, setGithubPushing] = useState(false);
+  const [githubResult, setGithubResult] = useState<{ repoUrl: string } | { error: string } | null>(null);
 
   const hasVercel = connectors.some((c) => c.provider === "vercel");
+  const hasGitHub = connectors.some((c) => c.provider === "github");
 
   const send = async () => {
     if (!draft.trim() || sending) return;
@@ -133,6 +137,24 @@ function Editor() {
     }
   };
 
+  const pushViaGitHub = async () => {
+    if (githubPushing) return;
+    setGithubPushing(true);
+    setGithubResult(null);
+    try {
+      const res = await pushToGitHub({ data: { projectId: project.id } });
+      if (res.ok) {
+        setGithubResult({ repoUrl: res.repoUrl });
+      } else {
+        setGithubResult({ error: res.error });
+      }
+    } catch (e) {
+      setGithubResult({ error: e instanceof Error ? e.message : "GitHub push failed." });
+    } finally {
+      setGithubPushing(false);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       {/* Project header */}
@@ -162,6 +184,19 @@ function Editor() {
             </a>
           )}
 
+          {/* Push to GitHub button — only when GitHub connector is active */}
+          {hasGitHub && (
+            <button
+              onClick={pushViaGitHub}
+              disabled={githubPushing}
+              className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+              title="Push code to GitHub"
+            >
+              <Github className="h-3.5 w-3.5" />
+              {githubPushing ? "Pushing…" : "Push to GitHub"}
+            </button>
+          )}
+
           {/* Deploy to Vercel button — only when Vercel connector is active */}
           {hasVercel && (
             <button
@@ -184,6 +219,36 @@ function Editor() {
           </button>
         </div>
       </div>
+
+      {/* GitHub push result banner */}
+      {githubResult && (
+        <div className={`flex items-center gap-3 border-b px-4 py-2.5 text-sm ${
+          "repoUrl" in githubResult
+            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+            : "border-red-500/20 bg-red-500/10 text-red-400"
+        }`}>
+          {"repoUrl" in githubResult ? (
+            <>
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>Pushed to GitHub!</span>
+              <a
+                href={githubResult.repoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 font-medium underline underline-offset-2"
+              >
+                {githubResult.repoUrl} <ExternalLink className="h-3 w-3" />
+              </a>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {githubResult.error}
+            </>
+          )}
+          <button onClick={() => setGithubResult(null)} className="ml-auto text-current opacity-60 hover:opacity-100">✕</button>
+        </div>
+      )}
 
       {/* Vercel deploy result banner */}
       {vercelResult && (

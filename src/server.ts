@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { handleIntegrationRequest, CORS_HEADERS as INTEGRATION_CORS } from "./lib/integrate";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -58,6 +59,19 @@ function applySecurityHeaders(response: Response): Response {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // Integration API — public CORS endpoints for generated websites
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/integrate/")) {
+      try {
+        return await handleIntegrationRequest(url.pathname, request);
+      } catch (err) {
+        return new Response(JSON.stringify({ ok: false, error: "Internal server error" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...INTEGRATION_CORS },
+        });
+      }
+    }
+
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

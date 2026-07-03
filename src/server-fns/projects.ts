@@ -10,6 +10,7 @@ import {
   deployProjectRecord,
   getProject,
   getProjectMessages,
+  listConnectors,
   listProjects,
   listTrashedProjects,
   recordDailyUsage,
@@ -44,9 +45,22 @@ export const createProject = createServerFn({ method: "POST" })
     await checkDailyLimit(user.id);
 
     const ref = getStyleReference(data.styleReferenceId);
+
+    // Fetch connectors to pass integration context to the AI
+    const connectors = await listConnectors(user.id);
+    const hasGoogle = connectors.some((c) => c.provider === "google");
+    const integrations = {
+      userId: user.id,
+      hasGmail: hasGoogle,
+      hasSheets: hasGoogle,
+      hasCalendar: hasGoogle,
+      hasRazorpay: connectors.some((c) => c.provider === "razorpay"),
+    };
+
     const { html, costUsd } = await generateSite({
       ...data,
       styleReference: ref ? { name: ref.name, code: ref.codeExcerpt } : undefined,
+      integrations,
     });
 
     // Record actual cost after successful generation.

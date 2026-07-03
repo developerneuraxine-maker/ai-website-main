@@ -20,7 +20,7 @@ export const Route = createFileRoute("/auth_/connector-callback")({
     const origin =
       typeof window !== "undefined"
         ? window.location.origin
-        : (process.env.APP_URL ?? "http://localhost:3000");
+        : (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
     const result = await exchangeConnectorCode({
       data: {

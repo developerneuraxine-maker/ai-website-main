@@ -76,7 +76,7 @@ export const getGitHubOAuthUrl = createServerFn({ method: "GET" }).handler(async
   const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString("base64url");
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: `${process.env.APP_URL ?? "http://localhost:3000"}/auth/connector-callback`,
+    redirect_uri: `${(process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/auth/connector-callback`,
     scope: "read:user user:email repo",
     state: `github:${state}`,
   });
@@ -93,7 +93,7 @@ export const getGoogleConnectorOAuthUrl = createServerFn({ method: "GET" }).hand
   const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString("base64url");
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: `${process.env.APP_URL ?? "http://localhost:3000"}/auth/connector-callback`,
+    redirect_uri: `${(process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/auth/connector-callback`,
     response_type: "code",
     scope: [
       "https://www.googleapis.com/auth/userinfo.email",

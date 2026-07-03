@@ -22,6 +22,7 @@ export async function createRazorpayOrder(userId: string): Promise<{
 }> {
   const { keyId, keySecret } = getKeys();
   const amountPaise = PLAN_PRICE_INR * 100; // Razorpay uses paise
+  const receipt = `lumen_${userId.slice(0, 20)}_${Date.now().toString().slice(-10)}`.slice(0, 40);
 
   const res = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
@@ -32,7 +33,7 @@ export async function createRazorpayOrder(userId: string): Promise<{
     body: JSON.stringify({
       amount: amountPaise,
       currency: "INR",
-      receipt: `lumen_${userId}_${Date.now()}`,
+      receipt,
       notes: { userId, plan: "paid" },
     }),
   });

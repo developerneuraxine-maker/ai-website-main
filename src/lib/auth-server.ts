@@ -68,6 +68,7 @@ export type ServerUser = {
   id: string;
   email: string;
   isAdmin: boolean;
+  suspended: boolean;
 };
 
 // Decode JWT payload without verifying the signature.
@@ -115,7 +116,7 @@ export async function getServerUser(): Promise<ServerUser | null> {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_admin")
+    .select("is_admin, suspended_at")
     .eq("id", user.id)
     .single();
 
@@ -124,6 +125,7 @@ export async function getServerUser(): Promise<ServerUser | null> {
     id: user.id,
     email,
     isAdmin: email === "socialsprouts1@gmail.com" || (profile?.is_admin ?? false),
+    suspended: !!profile?.suspended_at,
   };
 }
 
@@ -131,6 +133,7 @@ export async function getServerUser(): Promise<ServerUser | null> {
 export async function requireUser(): Promise<ServerUser> {
   const user = await getServerUser();
   if (!user) throw new Error("Unauthorized");
+  if (user.suspended) throw new Error("Account suspended. Contact support@neuraxine.com.");
   return user;
 }
 

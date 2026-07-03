@@ -583,6 +583,10 @@ export type AdminUser = {
   is_admin: boolean;
   created_at: string;
   project_count: number;
+  plan_type?: "free" | "paid";
+  daily_cost_usd?: number;
+  suspended_at?: string | null;
+  suspended_reason?: string | null;
 };
 
 export async function adminListUsers(): Promise<AdminUser[]> {
@@ -646,6 +650,163 @@ export async function adminToggleAdmin(userId: string, isAdmin: boolean) {
     .from("user_profiles")
     .update({ is_admin: isAdmin })
     .eq("id", userId);
+  if (error) throw error;
+}
+
+export async function adminSuspendUser(userId: string, reason: string) {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ suspended_at: new Date().toISOString(), suspended_reason: reason || "Suspended by admin" })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+export async function adminUnsuspendUser(userId: string) {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ suspended_at: null, suspended_reason: null })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+export type AdminRevenueStats = {
+  totalUsers: number;
+  proUsers: number;
+  freeUsers: number;
+  mrrInr: number;
+  totalAiCostUsd: number;
+  totalProjects: number;
+  totalDeployments: number;
+  totalVisits: number;
+};
+
+export async function adminGetRevenueStats(): Promise<AdminRevenueStats> {
+  const supabase = getSupabase();
+  const [profiles, projects, deployments, visitsRes] = await Promise.all([
+    supabase.from("user_profiles").select("id,plan_type,daily_cost_usd"),
+    supabase.from("projects").select("id", { count: "exact", head: true }).is("deleted_at", null),
+    supabase.from("deployments").select("id", { count: "exact", head: true }),
+    supabase.from("projects").select("visits").is("deleted_at", null),
+  ]);
+  const rows = profiles.data ?? [];
+  const proUsers = rows.filter((r) => r.plan_type === "paid").length;
+  const totalAiCostUsd = rows.reduce((s, r) => s + (r.daily_cost_usd ?? 0), 0);
+  const totalVisits = (visitsRes.data ?? []).reduce((s, p) => s + (p.visits ?? 0), 0);
+  return {
+    totalUsers: rows.length,
+    proUsers,
+    freeUsers: rows.length - proUsers,
+    mrrInr: proUsers * 500,
+    totalAiCostUsd: Math.round(totalAiCostUsd * 100) / 100,
+    totalProjects: projects.count ?? 0,
+    totalDeployments: deployments.count ?? 0,
+    totalVisits,
+  };
+}
+
+export type AdminUserDetail = AdminUser & {
+  plan_type: "free" | "paid";
+  daily_cost_usd: number;
+  suspended_at: string | null;
+  suspended_reason: string | null;
+  projects: { id: string; name: string; status: string; created_at: string }[];
+};
+
+export async function adminListUsersDetailed(): Promise<AdminUserDetail[]> {
+  const supabase = getSupabase();
+  const { data: profiles, error } = await supabase
+    .from("user_profiles")
+    .select()
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const ids = (profiles ?? []).map((p) => p.id);
+  const { data: projectRows } = await supabase
+    .from("projects")
+    .select("user_id,id,name,status,created_at")
+    .in("user_id", ids)
+    .is("deleted_at", null);
+
+  const projectsByUser = new Map<string, { id: string; name: string; status: string; created_at: string }[]>();
+  for (const p of projectRows ?? []) {
+    if (!p.user_id) continue;
+    const list = projectsByUser.get(p.user_id) ?? [];
+    list.push({ id: p.id, name: p.name, status: p.status, created_at: p.created_at });
+    projectsByUser.set(p.user_id, list);
+  }
+
+  return (profiles ?? []).map((p) => ({
+    id: p.id,
+    email: p.email ?? "",
+    is_admin: p.is_admin,
+    created_at: p.created_at,
+    plan_type: p.plan_type ?? "free",
+    daily_cost_usd: p.daily_cost_usd ?? 0,
+    suspended_at: p.suspended_at ?? null,
+    suspended_reason: p.suspended_reason ?? null,
+    project_count: (projectsByUser.get(p.id) ?? []).length,
+    projects: (projectsByUser.get(p.id) ?? []).slice(0, 5),
+  }));
+}
+
+// ---- Connectors ----
+
+export type ConnectorRow = {
+  id: string;
+  user_id: string;
+  provider: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  metadata: Record<string, string>;
+  connected_at: string;
+};
+
+export async function listConnectors(userId: string): Promise<ConnectorRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("connectors")
+    .select()
+    .eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []) as ConnectorRow[];
+}
+
+export async function upsertConnector(
+  userId: string,
+  provider: string,
+  accessToken: string,
+  metadata: Record<string, string> = {},
+  refreshToken?: string,
+  expiresAt?: string,
+) {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("connectors")
+    .upsert(
+      {
+        user_id: userId,
+        provider,
+        access_token: accessToken,
+        refresh_token: refreshToken ?? null,
+        token_expires_at: expiresAt ?? null,
+        metadata,
+        connected_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,provider" },
+    );
+  if (error) throw error;
+}
+
+export async function deleteConnector(userId: string, provider: string) {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("connectors")
+    .delete()
+    .eq("user_id", userId)
+    .eq("provider", provider);
   if (error) throw error;
 }
 

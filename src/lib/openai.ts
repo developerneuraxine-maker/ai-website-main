@@ -215,10 +215,82 @@ Output ONLY the complete updated raw HTML document. No markdown, no commentary, 
 
 export type GenerateResult = { html: string; costUsd: number };
 
+// Expands a short prompt into a detailed website generation prompt.
+// Uses a cheaper fast model to keep cost minimal.
+export async function enhanceUserPrompt(shortPrompt: string): Promise<string> {
+  const completion = await getClient().chat.completions.create({
+    model: "gpt-4o-mini",
+    max_completion_tokens: 350,
+    messages: [
+      {
+        role: "system",
+        content: `You are a professional web designer's prompt enhancer. Take a short website description and expand it into a rich, detailed prompt for an AI website generator. Include: specific sections to build (hero, features, pricing, testimonials, contact, etc.), animations, visual style, responsive layout, typography, colors, and copy tone. Return ONLY the enhanced prompt text — no intro, no explanation, no quotation marks. Maximum 220 words. Be specific and professional.`,
+      },
+      {
+        role: "user",
+        content: `Enhance this website prompt: ${shortPrompt}`,
+      },
+    ],
+  });
+  return completion.choices[0]?.message?.content?.trim() ?? shortPrompt;
+}
+
 function extractHtml(raw: string): string {
   const fenced = raw.match(/```(?:html)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1] : raw;
   return candidate.trim();
+}
+
+const NEURAXINE_BADGE = `
+<!-- Neuraxine Badge -->
+<style>
+#__neuraxine-badge{position:fixed;bottom:20px;right:20px;z-index:2147483647;display:flex;align-items:center;gap:0;font-family:system-ui,-apple-system,sans-serif;}
+#__neuraxine-btn{display:flex;align-items:center;gap:8px;background:#09090b;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:24px;padding:8px 16px 8px 12px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;letter-spacing:-0.01em;box-shadow:0 4px 24px rgba(0,0,0,0.35);transition:all 0.2s;}
+#__neuraxine-btn:hover{background:#18181b;transform:translateY(-1px);box-shadow:0 6px 32px rgba(0,0,0,0.45);}
+#__neuraxine-btn svg{width:16px;height:16px;}
+#__neuraxine-close{display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:#09090b;border:1px solid rgba(255,255,255,0.12);border-radius:50%;color:rgba(255,255,255,0.6);font-size:11px;cursor:pointer;margin-left:4px;transition:all 0.2s;flex-shrink:0;}
+#__neuraxine-close:hover{color:#fff;background:#3f3f46;}
+#__neuraxine-overlay{display:none;position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);align-items:center;justify-content:center;}
+#__neuraxine-overlay.open{display:flex;}
+#__neuraxine-modal{background:#09090b;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;max-width:360px;width:calc(100% - 40px);text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif;}
+#__neuraxine-modal h2{font-size:22px;font-weight:700;margin:0 0 8px;letter-spacing:-0.02em;}
+#__neuraxine-modal p{font-size:14px;color:rgba(255,255,255,0.6);margin:0 0 24px;line-height:1.6;}
+#__neuraxine-modal .price{font-size:36px;font-weight:800;color:#fff;letter-spacing:-0.03em;margin-bottom:4px;}
+#__neuraxine-modal .price span{font-size:16px;font-weight:400;color:rgba(255,255,255,0.4);}
+.n-upgrade-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:16px;text-decoration:none;transition:opacity 0.2s;}
+.n-upgrade-btn:hover{opacity:0.9;}
+.n-dismiss{display:block;margin-top:12px;font-size:13px;color:rgba(255,255,255,0.4);cursor:pointer;background:none;border:none;width:100%;}
+.n-dismiss:hover{color:rgba(255,255,255,0.7);}
+</style>
+<div id="__neuraxine-badge">
+  <a id="__neuraxine-btn" href="https://www.neuraxine.com" target="_blank" rel="noopener">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" fill="white"/><line x1="20" y1="3" x2="20" y2="7" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="22" y1="5" x2="18" y2="5" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="4" y1="17" x2="4" y2="21" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="19" x2="2" y2="19" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+    Edit with Neuraxine
+  </a>
+  <button id="__neuraxine-close" onclick="document.getElementById('__neuraxine-overlay').classList.add('open')" aria-label="Upgrade">✕</button>
+</div>
+<div id="__neuraxine-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div id="__neuraxine-modal">
+    <div style="font-size:32px;margin-bottom:12px">✨</div>
+    <h2>Upgrade to Pro</h2>
+    <p>Unlock unlimited websites, custom domains, priority AI, and remove all branding.</p>
+    <div class="price">₹500<span>/month</span></div>
+    <a class="n-upgrade-btn" href="https://www.neuraxine.com" target="_blank" rel="noopener">Upgrade to Pro →</a>
+    <button class="n-dismiss" onclick="document.getElementById('__neuraxine-overlay').classList.remove('open')">Maybe later</button>
+  </div>
+</div>
+<!-- /Neuraxine Badge -->
+`;
+
+export function injectNeuraxineBadge(html: string): string {
+  if (html.includes("__neuraxine-badge")) return html;
+  if (html.includes("</body>")) {
+    return html.replace("</body>", NEURAXINE_BADGE + "\n</body>");
+  }
+  if (html.includes("</html>")) {
+    return html.replace("</html>", NEURAXINE_BADGE + "\n</html>");
+  }
+  return html + NEURAXINE_BADGE;
 }
 
 export async function generateSite(opts: {
@@ -227,7 +299,10 @@ export async function generateSite(opts: {
   palette: string;
   motion: string;
   language: string;
-  imageUrl?: string;
+  theme?: string;
+  font?: string;
+  referenceUrl?: string;
+  imageUrls?: string[];
   styleReference?: { name: string; code: string };
 }): Promise<GenerateResult> {
   const userMessage = [
@@ -236,17 +311,24 @@ export async function generateSite(opts: {
     ``,
     `Category: ${opts.category}`,
     `Color palette mood: ${opts.palette}`,
+    opts.theme ? `Visual theme style: ${opts.theme}` : null,
+    opts.font ? `Primary font family: ${opts.font} (import from Google Fonts)` : null,
     `Motion / animation level: ${opts.motion}`,
     `Language for all copy: ${opts.language}`,
+    opts.referenceUrl ? `Reference website for style inspiration (match its visual language, not content): ${opts.referenceUrl}` : null,
     ``,
     `Design bar: this must look like it was built by a $50k/project design studio.`,
     `Use the full design system from the system prompt — typography, glow orbs, glassmorphism cards, gradient text, scroll animations, and all mandatory sections.`,
     `Make the copy specific and compelling for this exact business type — no generic filler.`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   let systemPrompt = SYSTEM_PROMPT;
-  if (opts.imageUrl) {
-    systemPrompt += `\n\nIMAGE REFERENCE: The user provided a reference image at this URL: ${opts.imageUrl}\nUse it directly in an <img src="${opts.imageUrl}" alt="..."> in the hero or a fitting gallery section — it resolves safely. Also draw the color/mood of the design from this image.`;
+  const urls = opts.imageUrls?.filter(Boolean) ?? [];
+  if (urls.length === 1) {
+    systemPrompt += `\n\nIMAGE REFERENCE: The user provided a reference image at this URL: ${urls[0]}\nUse it directly in an <img src="${urls[0]}" alt="..."> in the hero or a fitting gallery section — it resolves safely. Also draw the color/mood of the design from this image.`;
+  } else if (urls.length > 1) {
+    const list = urls.map((u, i) => `Image ${i + 1}: ${u}`).join("\n");
+    systemPrompt += `\n\nIMAGE REFERENCES: The user provided ${urls.length} reference images. Use them in <img> tags throughout the page (hero, gallery, about, team sections etc.) — all URLs resolve safely.\n${list}\nDraw the overall color palette and mood from these images.`;
   }
   if (opts.styleReference) {
     systemPrompt += `\n\nSTYLE REFERENCE — "${opts.styleReference.name}": The code below is from the user's own previous project. Study ONLY its visual patterns: layout rhythm, spacing scale, typography choices, color depth, card polish, shadow treatment, glassmorphism, gradients. Match or exceed that quality level. Do NOT copy any business name, copy, contact info, or images — write entirely new content.\nNote: the reference may use Tailwind v4 @theme syntax which the CDN script does NOT support. Translate values to CSS custom properties or Tailwind arbitrary-value classes instead.\n\n--- STYLE REFERENCE ---\n${opts.styleReference.code}\n--- END STYLE REFERENCE ---`;
@@ -255,14 +337,14 @@ export async function generateSite(opts: {
   const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
     { type: "text", text: userMessage },
   ];
-  if (opts.imageUrl) {
-    userContent.push({ type: "image_url", image_url: { url: opts.imageUrl } });
+  for (const url of urls) {
+    userContent.push({ type: "image_url", image_url: { url } });
   }
 
   const model = getModel();
   const completion = await getClient().chat.completions.create({
     model,
-    max_tokens: 16384,
+    max_completion_tokens: 16384,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -271,7 +353,7 @@ export async function generateSite(opts: {
   const raw = completion.choices[0]?.message?.content ?? "";
   const inputTokens = completion.usage?.prompt_tokens ?? 0;
   const outputTokens = completion.usage?.completion_tokens ?? 0;
-  return { html: extractHtml(raw), costUsd: estimateCostUsd(model, inputTokens, outputTokens) };
+  return { html: injectNeuraxineBadge(extractHtml(raw)), costUsd: estimateCostUsd(model, inputTokens, outputTokens) };
 }
 
 export async function reviseSite(opts: {
@@ -281,7 +363,7 @@ export async function reviseSite(opts: {
   const model = getModel();
   const completion = await getClient().chat.completions.create({
     model,
-    max_tokens: 16384,
+    max_completion_tokens: 16384,
     messages: [
       { role: "system", content: REVISE_SYSTEM_PROMPT },
       {
@@ -293,5 +375,5 @@ export async function reviseSite(opts: {
   const raw = completion.choices[0]?.message?.content ?? "";
   const inputTokens = completion.usage?.prompt_tokens ?? 0;
   const outputTokens = completion.usage?.completion_tokens ?? 0;
-  return { html: extractHtml(raw), costUsd: estimateCostUsd(model, inputTokens, outputTokens) };
+  return { html: injectNeuraxineBadge(extractHtml(raw)), costUsd: estimateCostUsd(model, inputTokens, outputTokens) };
 }

@@ -17,6 +17,8 @@ export type Database = {
           razorpay_order_id: string | null;
           daily_cost_usd: number;
           daily_reset_date: string;
+          suspended_at: string | null;
+          suspended_reason: string | null;
         },
         {
           id: string;
@@ -27,6 +29,29 @@ export type Database = {
           razorpay_order_id?: string | null;
           daily_cost_usd?: number;
           daily_reset_date?: string;
+          suspended_at?: string | null;
+          suspended_reason?: string | null;
+        }
+      >;
+      connectors: Table<
+        {
+          id: string;
+          user_id: string;
+          provider: string;
+          access_token: string | null;
+          refresh_token: string | null;
+          token_expires_at: string | null;
+          metadata: Record<string, string>;
+          connected_at: string;
+        },
+        {
+          user_id: string;
+          provider: string;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          token_expires_at?: string | null;
+          metadata?: Record<string, string>;
+          connected_at?: string;
         }
       >;
       projects: Table<

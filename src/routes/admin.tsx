@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, redirect } from "@tanstack/react-router";
 import { fetchCurrentUser } from "@/server-fns/auth";
-import { Users, FolderKanban, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { Users, FolderKanban, LayoutDashboard, ShieldCheck, IndianRupee } from "lucide-react";
 import { useRouterState } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin")({

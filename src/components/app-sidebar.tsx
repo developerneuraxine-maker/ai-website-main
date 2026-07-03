@@ -13,6 +13,7 @@ import {
   Sparkles,
   ShieldCheck,
   Zap,
+  Plug,
 } from "lucide-react";
 import {
   Sidebar,
@@ -34,6 +35,7 @@ const primary = [
   { title: "Templates", url: "/templates", icon: LayoutTemplate },
   { title: "Deployments", url: "/deployments", icon: Rocket },
   { title: "Version History", url: "/history", icon: History },
+  { title: "Connectors", url: "/connectors", icon: Plug },
 ];
 
 const secondary = [

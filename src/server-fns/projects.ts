@@ -26,7 +26,10 @@ export const createProject = createServerFn({ method: "POST" })
       palette: string;
       motion: string;
       language: string;
-      imageUrl?: string;
+      theme?: string;
+      font?: string;
+      referenceUrl?: string;
+      imageUrls?: string[];
       styleReferenceId?: string;
     }) => {
       if (!d.prompt || d.prompt.trim().length === 0) throw new Error("Prompt is required.");

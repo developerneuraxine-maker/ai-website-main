@@ -15,6 +15,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SitesIdRouteImport } from './routes/sites.$id'
+import { Route as AuthConnectorCallbackRouteImport } from './routes/auth_.connector-callback'
 import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminProjectsRouteImport } from './routes/admin.projects'
@@ -30,6 +31,7 @@ import { Route as AppNewRouteImport } from './routes/_app.new'
 import { Route as AppHistoryRouteImport } from './routes/_app.history'
 import { Route as AppDeploymentsRouteImport } from './routes/_app.deployments'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppConnectorsRouteImport } from './routes/_app.connectors'
 import { Route as AppApiKeysRouteImport } from './routes/_app.api-keys'
 import { Route as AppProjectsIdRouteImport } from './routes/_app.projects.$id'
 
@@ -60,6 +62,11 @@ const IndexRoute = IndexRouteImport.update({
 const SitesIdRoute = SitesIdRouteImport.update({
   id: '/sites/$id',
   path: '/sites/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthConnectorCallbackRoute = AuthConnectorCallbackRouteImport.update({
+  id: '/auth_/connector-callback',
+  path: '/auth/connector-callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -137,6 +144,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppConnectorsRoute = AppConnectorsRouteImport.update({
+  id: '/connectors',
+  path: '/connectors',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppApiKeysRoute = AppApiKeysRouteImport.update({
   id: '/api-keys',
   path: '/api-keys',
@@ -154,6 +166,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api-keys': typeof AppApiKeysRoute
+  '/connectors': typeof AppConnectorsRoute
   '/dashboard': typeof AppDashboardRoute
   '/deployments': typeof AppDeploymentsRoute
   '/history': typeof AppHistoryRoute
@@ -169,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/admin/projects': typeof AdminProjectsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/connector-callback': typeof AuthConnectorCallbackRoute
   '/sites/$id': typeof SitesIdRoute
   '/projects/$id': typeof AppProjectsIdRoute
 }
@@ -178,6 +192,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api-keys': typeof AppApiKeysRoute
+  '/connectors': typeof AppConnectorsRoute
   '/dashboard': typeof AppDashboardRoute
   '/deployments': typeof AppDeploymentsRoute
   '/history': typeof AppHistoryRoute
@@ -193,6 +208,7 @@ export interface FileRoutesByTo {
   '/admin/projects': typeof AdminProjectsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/connector-callback': typeof AuthConnectorCallbackRoute
   '/sites/$id': typeof SitesIdRoute
   '/projects/$id': typeof AppProjectsIdRoute
 }
@@ -204,6 +220,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_app/api-keys': typeof AppApiKeysRoute
+  '/_app/connectors': typeof AppConnectorsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/deployments': typeof AppDeploymentsRoute
   '/_app/history': typeof AppHistoryRoute
@@ -219,6 +236,7 @@ export interface FileRoutesById {
   '/admin/projects': typeof AdminProjectsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth_/callback': typeof AuthCallbackRoute
+  '/auth_/connector-callback': typeof AuthConnectorCallbackRoute
   '/sites/$id': typeof SitesIdRoute
   '/_app/projects/$id': typeof AppProjectsIdRoute
 }
@@ -230,6 +248,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/sitemap.xml'
     | '/api-keys'
+    | '/connectors'
     | '/dashboard'
     | '/deployments'
     | '/history'
@@ -245,6 +264,7 @@ export interface FileRouteTypes {
     | '/admin/projects'
     | '/admin/users'
     | '/auth/callback'
+    | '/auth/connector-callback'
     | '/sites/$id'
     | '/projects/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -254,6 +274,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/sitemap.xml'
     | '/api-keys'
+    | '/connectors'
     | '/dashboard'
     | '/deployments'
     | '/history'
@@ -269,6 +290,7 @@ export interface FileRouteTypes {
     | '/admin/projects'
     | '/admin/users'
     | '/auth/callback'
+    | '/auth/connector-callback'
     | '/sites/$id'
     | '/projects/$id'
   id:
@@ -279,6 +301,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/sitemap.xml'
     | '/_app/api-keys'
+    | '/_app/connectors'
     | '/_app/dashboard'
     | '/_app/deployments'
     | '/_app/history'
@@ -294,6 +317,7 @@ export interface FileRouteTypes {
     | '/admin/projects'
     | '/admin/users'
     | '/auth_/callback'
+    | '/auth_/connector-callback'
     | '/sites/$id'
     | '/_app/projects/$id'
   fileRoutesById: FileRoutesById
@@ -305,6 +329,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthConnectorCallbackRoute: typeof AuthConnectorCallbackRoute
   SitesIdRoute: typeof SitesIdRoute
 }
 
@@ -350,6 +375,13 @@ declare module '@tanstack/react-router' {
       path: '/sites/$id'
       fullPath: '/sites/$id'
       preLoaderRoute: typeof SitesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth_/connector-callback': {
+      id: '/auth_/connector-callback'
+      path: '/auth/connector-callback'
+      fullPath: '/auth/connector-callback'
+      preLoaderRoute: typeof AuthConnectorCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth_/callback': {
@@ -457,6 +489,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/connectors': {
+      id: '/_app/connectors'
+      path: '/connectors'
+      fullPath: '/connectors'
+      preLoaderRoute: typeof AppConnectorsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/api-keys': {
       id: '/_app/api-keys'
       path: '/api-keys'
@@ -488,6 +527,7 @@ const AppProjectsRouteWithChildren = AppProjectsRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppApiKeysRoute: typeof AppApiKeysRoute
+  AppConnectorsRoute: typeof AppConnectorsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppDeploymentsRoute: typeof AppDeploymentsRoute
   AppHistoryRoute: typeof AppHistoryRoute
@@ -503,6 +543,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppApiKeysRoute: AppApiKeysRoute,
+  AppConnectorsRoute: AppConnectorsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppDeploymentsRoute: AppDeploymentsRoute,
   AppHistoryRoute: AppHistoryRoute,
@@ -539,6 +580,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  AuthConnectorCallbackRoute: AuthConnectorCallbackRoute,
   SitesIdRoute: SitesIdRoute,
 }
 export const routeTree = rootRouteImport

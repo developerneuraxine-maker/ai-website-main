@@ -99,6 +99,7 @@ Cinematic / Playful → FULL EFFECTS:
   • CSS @keyframes: fadeInUp (translateY 32px→0, opacity 0→1, 0.6s ease-out), scaleIn (scale 0.92→1), shimmer
   • Staggered animation-delay on cards: 0s, 0.1s, 0.2s, 0.3s
   • IntersectionObserver scroll reveal: add class "revealed" when element enters viewport
+  • CRITICAL — hero is ALWAYS visible: NEVER set hero section or its children to opacity:0 via JS or CSS. Hero content must be visible immediately on page load with CSS animations (animation: fadeInUp 0.6s ease-out forwards). Only apply IntersectionObserver to sections BELOW the hero. IntersectionObserver must also use {rootMargin:'0px 0px -50px 0px', threshold:0.1} and immediately reveal any element whose getBoundingClientRect().top < window.innerHeight on DOMContentLoaded.
   • Button hover: translateY(-3px) + brighter gradient + stronger shadow
   • Nav links: animated underline via ::after pseudo-element scaleX 0→1
 
@@ -279,6 +280,34 @@ const NEURAXINE_BADGE = `
     <button class="n-dismiss" onclick="document.getElementById('__neuraxine-overlay').classList.remove('open')">Maybe later</button>
   </div>
 </div>
+<script>
+// Safety net: reveal elements hidden by scroll animations that are already in the viewport.
+// Runs immediately + after 400ms to catch both sync and async JS initialisation.
+(function revealAboveFold(){
+  var els = document.querySelectorAll('.reveal,.scroll-reveal,.fade-in,.animate-on-scroll,[data-aos]');
+  for(var i=0;i<els.length;i++){
+    var r=els[i].getBoundingClientRect();
+    if(r.top<window.innerHeight){
+      els[i].classList.add('revealed','visible','aos-animate','active','in-view');
+      els[i].style.opacity='';
+      els[i].style.transform='';
+    }
+  }
+}());
+window.addEventListener('DOMContentLoaded',function(){
+  setTimeout(function(){
+    var els=document.querySelectorAll('.reveal,.scroll-reveal,.fade-in,.animate-on-scroll,[data-aos]');
+    for(var i=0;i<els.length;i++){
+      var r=els[i].getBoundingClientRect();
+      if(r.top<window.innerHeight){
+        els[i].classList.add('revealed','visible','aos-animate','active','in-view');
+        els[i].style.opacity='';
+        els[i].style.transform='';
+      }
+    }
+  },300);
+});
+</script>
 <!-- /Neuraxine Badge -->
 `;
 

@@ -865,7 +865,9 @@ export async function getUserPlan(userId: string): Promise<UserPlan> {
 
   const effectivePlan: PlanType = isPaidActive ? "paid" : "free";
   const limit = PLAN_MONTHLY_LIMIT_USD[effectivePlan];
-  const usagePct = Math.min(100, Math.round((monthlyCost / limit) * 100));
+  // Use Math.ceil for non-zero usage so even tiny costs show as at least 1%
+  const rawPct = (monthlyCost / limit) * 100;
+  const usagePct = monthlyCost > 0 ? Math.min(100, Math.max(1, Math.ceil(rawPct))) : 0;
 
   return {
     plan_type: effectivePlan,
@@ -924,19 +926,27 @@ export async function recordDailyUsage(userId: string, costUsd: number): Promise
   const supabase = getSupabase();
   const thisMonth = currentMonthStr();
 
-  const { data } = await supabase
+  const { data, error: fetchError } = await supabase
     .from("user_profiles")
     .select("daily_cost_usd,daily_reset_date")
     .eq("id", userId)
     .single();
 
+  if (fetchError) throw new Error(`Failed to fetch usage for user ${userId}: ${fetchError.message}`);
+
   const currentCost =
     (data?.daily_reset_date ?? "").slice(0, 7) < thisMonth ? 0 : (data?.daily_cost_usd ?? 0);
 
-  await supabase
+  // Enforce a minimum per-generation cost so the bar always moves visibly
+  const effectiveCost = Math.max(costUsd, 0.001);
+
+  const { error: updateError } = await supabase
     .from("user_profiles")
-    .update({ daily_cost_usd: currentCost + costUsd, daily_reset_date: thisMonth })
+    .update({ daily_cost_usd: currentCost + effectiveCost, daily_reset_date: thisMonth })
     .eq("id", userId);
+
+  if (updateError)
+    throw new Error(`Failed to record usage for user ${userId}: ${updateError.message}`);
 }
 
 export async function upgradeToPaid(userId: string, razorpayOrderId: string): Promise<void> {

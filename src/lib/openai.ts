@@ -96,10 +96,9 @@ Cinematic / Playful → FULL EFFECTS:
   • Gradient text: background: linear-gradient(...); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text
   • Glassmorphism cards: background: rgba(255,255,255,0.04); backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px
   • Elevated shadows with brand color: box-shadow: 0 24px 64px -12px rgba(VAR_PRIMARY_RGB, 0.35)
-  • CSS @keyframes: fadeInUp (translateY 32px→0, opacity 0→1, 0.6s ease-out), scaleIn (scale 0.92→1), shimmer
+  • CSS @keyframes: slideUp (translateY 28px→0, opacity 1→1, 0.65s ease-out — OPACITY STAYS 1 THROUGHOUT), scaleIn (scale 0.94→1 — OPACITY STAYS 1), shimmer
   • Staggered animation-delay on cards: 0s, 0.1s, 0.2s, 0.3s
-  • IntersectionObserver scroll reveal: add class "revealed" when element enters viewport
-  • CRITICAL — hero is ALWAYS visible: NEVER set hero section or its children to opacity:0 via JS or CSS. Hero content must be visible immediately on page load with CSS animations (animation: fadeInUp 0.6s ease-out forwards). Only apply IntersectionObserver to sections BELOW the hero. IntersectionObserver must also use {rootMargin:'0px 0px -50px 0px', threshold:0.1} and immediately reveal any element whose getBoundingClientRect().top < window.innerHeight on DOMContentLoaded.
+  • CRITICAL — NEVER USE opacity:0 ANYWHERE: Not in keyframes, not in .reveal, not on hero, not on any element. All content must be visible (opacity:1) from the very first paint. Animations must only animate transform (translateY, scale) — NEVER opacity. The .reveal class: transform:translateY(24px); opacity:1; transition:transform 0.6s ease. The .revealed class: transform:translateY(0). IntersectionObserver: {threshold:0, rootMargin:'0px'} — add "revealed" class when element enters viewport. On DOMContentLoaded, immediately add "revealed" to all .reveal elements whose getBoundingClientRect().top < window.innerHeight.
   • Button hover: translateY(-3px) + brighter gradient + stronger shadow
   • Nav links: animated underline via ::after pseudo-element scaleX 0→1
 
@@ -331,32 +330,34 @@ const NEURAXINE_BADGE = `
   </div>
 </div>
 <script>
-// Safety net: reveal elements hidden by scroll animations that are already in the viewport.
-// Runs immediately + after 400ms to catch both sync and async JS initialisation.
-(function revealAboveFold(){
-  var els = document.querySelectorAll('.reveal,.scroll-reveal,.fade-in,.animate-on-scroll,[data-aos]');
-  for(var i=0;i<els.length;i++){
-    var r=els[i].getBoundingClientRect();
-    if(r.top<window.innerHeight){
-      els[i].classList.add('revealed','visible','aos-animate','active','in-view');
-      els[i].style.opacity='';
-      els[i].style.transform='';
-    }
-  }
-}());
-window.addEventListener('DOMContentLoaded',function(){
-  setTimeout(function(){
-    var els=document.querySelectorAll('.reveal,.scroll-reveal,.fade-in,.animate-on-scroll,[data-aos]');
+// Safety net: ensure no content is ever invisible due to scroll-reveal opacity tricks.
+// 1) Immediately reveal anything already in the viewport.
+// 2) After 600ms, reveal ALL remaining hidden elements (covers iframe previews where
+//    IntersectionObserver may not fire, and any opacity:0 animation that didn't complete).
+(function(){
+  var SEL='.reveal,.scroll-reveal,.fade-in,.animate-on-scroll,[data-aos]';
+  function revealAll(viewportOnly){
+    var els=document.querySelectorAll(SEL);
     for(var i=0;i<els.length;i++){
       var r=els[i].getBoundingClientRect();
-      if(r.top<window.innerHeight){
+      if(!viewportOnly||r.top<window.innerHeight+100){
         els[i].classList.add('revealed','visible','aos-animate','active','in-view');
-        els[i].style.opacity='';
-        els[i].style.transform='';
+        els[i].style.opacity='1';
+        els[i].style.transform='none';
+        els[i].style.visibility='visible';
       }
     }
-  },300);
-});
+  }
+  // Run immediately for above-fold content
+  revealAll(true);
+  // Run again after DOM is ready
+  document.addEventListener('DOMContentLoaded',function(){ revealAll(true); });
+  // Full reveal after 600ms — catches all sections regardless of scroll position
+  window.addEventListener('load',function(){
+    revealAll(true);
+    setTimeout(function(){ revealAll(false); },600);
+  });
+})();
 </script>
 <!-- /Neuraxine Badge -->
 `;

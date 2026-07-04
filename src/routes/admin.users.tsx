@@ -161,7 +161,10 @@ function SuspendModal({
       <div className="panel w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h3 className="font-display text-lg">Suspend user</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface">
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

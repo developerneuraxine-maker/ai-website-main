@@ -62,19 +62,19 @@ function UsageBar({ plan }: { plan: UserPlan }) {
   const barColor = usePlanColor(plan.usage_pct);
   const label =
     plan.usage_pct >= 100
-      ? "Today's limit reached — resets at midnight"
+      ? "Monthly limit reached — resets 1st of next month"
       : plan.usage_pct >= 90
-        ? `${plan.usage_pct}% used — almost at today's limit`
+        ? `${plan.usage_pct}% used — almost at this month's limit`
         : plan.usage_pct >= 50
-          ? `${plan.usage_pct}% of today's usage`
+          ? `${plan.usage_pct}% of this month's usage`
           : plan.usage_pct === 0
-            ? "No usage today"
-            : `${plan.usage_pct}% of today's usage`;
+            ? "No usage this month"
+            : `${plan.usage_pct}% of this month's usage`;
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">Today's AI usage</span>
+        <span className="text-muted-foreground">This month's AI usage</span>
         <span
           className={plan.usage_pct >= 90 ? "font-medium text-orange-500" : "text-muted-foreground"}
         >
@@ -87,7 +87,7 @@ function UsageBar({ plan }: { plan: UserPlan }) {
           style={{ width: `${Math.min(100, plan.usage_pct)}%` }}
         />
       </div>
-      <div className="text-[10px] text-muted-foreground">Resets at midnight every day</div>
+      <div className="text-[10px] text-muted-foreground">Resets on the 1st of every month</div>
     </div>
   );
 }
@@ -170,12 +170,12 @@ function Plans() {
     "Style reference anchoring",
     "Image/logo upload",
     "Deploy to public URL",
-    `Daily AI usage limit (resets at midnight)`,
+    `Monthly AI usage limit (resets 1st of month)`,
   ];
 
   const proFeatures = [
     "Everything in Free",
-    "35× higher daily AI usage",
+    "35× higher monthly AI usage",
     "Priority generation",
     "Pro badge in workspace",
     "Email support",
@@ -189,7 +189,7 @@ function Plans() {
         </div>
         <h1 className="font-display text-3xl">Plans & usage</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Your AI usage resets every day at midnight.
+          Your AI usage resets on the 1st of every month.
         </p>
       </div>
 
@@ -212,7 +212,7 @@ function Plans() {
           {plan.limit_reached && !plan.is_paid_active && (
             <div className="flex items-center gap-1.5 text-sm text-orange-500">
               <AlertCircle className="h-4 w-4" />
-              Free limit reached — resets at midnight
+              Free limit reached — resets next month
             </div>
           )}
         </div>
@@ -283,7 +283,7 @@ function Plans() {
             <span className="text-sm text-muted-foreground">/ month</span>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Build without limits. 35× more daily AI usage.
+            Build without limits. 35× more monthly AI usage.
           </p>
           <ul className="mt-5 space-y-2 text-sm">
             {proFeatures.map((f) => (

@@ -39,7 +39,6 @@ export const createProject = createServerFn({ method: "POST" })
       styleReferenceId?: string;
     }) => {
       if (!d.prompt || d.prompt.trim().length === 0) throw new Error("Prompt is required.");
-      if (d.prompt.length > 2000) throw new Error("Prompt must be 2000 characters or fewer.");
       return d;
     },
   )

@@ -20,8 +20,8 @@ import {
   softDeleteProject,
 } from "@/lib/db";
 
-// Owner account — bypasses all usage limits and always gets full generation.
-const OWNER_EMAIL = "socialsprouts1@gmail.com";
+// Owner accounts — bypass usage limits and always get full generation.
+const OWNER_EMAILS = ["socialsprouts1@gmail.com", "developerneuraxine@gmail.com"];
 
 export const createProject = createServerFn({ method: "POST" })
   .validator(
@@ -45,7 +45,7 @@ export const createProject = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireUser();
 
-    const isOwner = user.email === OWNER_EMAIL;
+    const isOwner = OWNER_EMAILS.includes(user.email);
     let freePreview = false;
 
     if (!isOwner) {
@@ -123,7 +123,7 @@ export const reviseProject = createServerFn({ method: "POST" })
     }
 
     // Check daily limit BEFORE calling OpenAI (owner is exempt).
-    if (user.email !== OWNER_EMAIL) await checkDailyLimit(user.id);
+    if (!OWNER_EMAILS.includes(user.email)) await checkDailyLimit(user.id);
 
     await addProjectMessage(data.id, "you", data.instruction);
     const { html, costUsd } = await reviseSite({

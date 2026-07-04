@@ -125,11 +125,12 @@ export async function getServerUser(): Promise<ServerUser | null> {
     .eq("id", user.id)
     .single();
 
-  const email = user.email ?? "";
+  const email = (user.email ?? "").toLowerCase();
+  const OWNER_ADMIN_EMAILS = ["socialsprouts1@gmail.com", "developerneuraxine@gmail.com"].map((e) => e.toLowerCase());
   return {
     id: user.id,
     email,
-    isAdmin: email === "socialsprouts1@gmail.com" || (profile?.is_admin ?? false),
+    isAdmin: OWNER_ADMIN_EMAILS.includes(email) || (profile?.is_admin ?? false),
     suspended: !!profile?.suspended_at,
   };
 }

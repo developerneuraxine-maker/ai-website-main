@@ -81,7 +81,14 @@ export async function handleGmail(userId: string, body: unknown): Promise<Respon
 
   // RFC 2822 message
   const raw = Buffer.from(
-    [`To: ${b.to}`, `Subject: ${b.subject}`, `MIME-Version: 1.0`, `Content-Type: text/plain; charset=utf-8`, ``, b.body].join("\r\n"),
+    [
+      `To: ${b.to}`,
+      `Subject: ${b.subject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: text/plain; charset=utf-8`,
+      ``,
+      b.body,
+    ].join("\r\n"),
   ).toString("base64url");
 
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
@@ -153,13 +160,17 @@ export async function handleCalendar(userId: string, body: unknown): Promise<Res
 export async function handleRazorpay(userId: string, body: unknown): Promise<Response> {
   const b = body as { amount?: number; currency?: string; receipt?: string };
   if (typeof b.amount !== "number" || b.amount <= 0)
-    return jsonErr("Missing or invalid field: amount (positive number in paise, e.g. 49900 = ₹499)");
+    return jsonErr(
+      "Missing or invalid field: amount (positive number in paise, e.g. 49900 = ₹499)",
+    );
 
   const connector = await getConnector(userId, "razorpay");
   if (!connector?.access_token || !connector.metadata?.key_secret)
     return jsonErr("Razorpay not connected.", 401);
 
-  const creds = Buffer.from(`${connector.access_token}:${connector.metadata.key_secret}`).toString("base64");
+  const creds = Buffer.from(`${connector.access_token}:${connector.metadata.key_secret}`).toString(
+    "base64",
+  );
 
   const res = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
@@ -177,11 +188,19 @@ export async function handleRazorpay(userId: string, body: unknown): Promise<Res
   }
 
   const data = (await res.json()) as { id?: string; amount?: number; currency?: string };
-  return jsonOk({ orderId: data.id, amount: data.amount, currency: data.currency, key: connector.access_token });
+  return jsonOk({
+    orderId: data.id,
+    amount: data.amount,
+    currency: data.currency,
+    key: connector.access_token,
+  });
 }
 
 // Route dispatcher: /api/integrate/{userId}/{action}
-export async function handleIntegrationRequest(pathname: string, request: Request): Promise<Response> {
+export async function handleIntegrationRequest(
+  pathname: string,
+  request: Request,
+): Promise<Response> {
   // CORS preflight
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -216,6 +235,9 @@ export async function handleIntegrationRequest(pathname: string, request: Reques
     case "razorpay-order":
       return handleRazorpay(userId, body);
     default:
-      return jsonErr(`Unknown action: ${action}. Valid actions: gmail, sheets, calendar, razorpay-order`, 404);
+      return jsonErr(
+        `Unknown action: ${action}. Valid actions: gmail, sheets, calendar, razorpay-order`,
+        404,
+      );
   }
 }

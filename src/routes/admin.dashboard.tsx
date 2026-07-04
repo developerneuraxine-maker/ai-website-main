@@ -1,14 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { fetchAdminRevenue } from "@/server-fns/admin";
 import { fetchVersions } from "@/server-fns/history";
-import { Users, FolderKanban, Rocket, Globe, IndianRupee, DollarSign, UserCheck, UserX } from "lucide-react";
+import {
+  Users,
+  FolderKanban,
+  Rocket,
+  Globe,
+  IndianRupee,
+  DollarSign,
+  UserCheck,
+} from "lucide-react";
 
 export const Route = createFileRoute("/admin/dashboard")({
   loader: async () => {
-    const [revenue, recentActivity] = await Promise.all([
-      fetchAdminRevenue(),
-      fetchVersions(),
-    ]);
+    const [revenue, recentActivity] = await Promise.all([fetchAdminRevenue(), fetchVersions()]);
     return { revenue, recentActivity: recentActivity.slice(0, 10) };
   },
   head: () => ({ meta: [{ title: "Admin Overview · Lumen" }] }),
@@ -103,7 +108,9 @@ function AdminDashboard() {
             <div
               className={`panel flex flex-col gap-3 p-5 transition ${c.href ? "hover:border-primary/40" : ""}`}
             >
-              <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${c.bg} ${c.color}`}>
+              <div
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${c.bg} ${c.color}`}
+              >
                 <c.icon className="h-5 w-5" />
               </div>
               <div>

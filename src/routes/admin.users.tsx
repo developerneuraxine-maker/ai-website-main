@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { fetchAdminUsersDetailed, toggleAdminRole, suspendUser, unsuspendUser } from "@/server-fns/admin";
+import {
+  fetchAdminUsersDetailed,
+  toggleAdminRole,
+  suspendUser,
+  unsuspendUser,
+} from "@/server-fns/admin";
 import {
   ShieldCheck,
   ShieldOff,
@@ -32,22 +37,13 @@ function planBadge(plan: "free" | "paid") {
   );
 }
 
-function UserDetailModal({
-  user,
-  onClose,
-}: {
-  user: AdminUserDetail;
-  onClose: () => void;
-}) {
+function UserDetailModal({ user, onClose }: { user: AdminUserDetail; onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div
-        className="panel w-full max-w-lg overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="panel w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-3">
@@ -127,13 +123,12 @@ function UserDetailModal({
                   >
                     <span className="truncate font-medium">{p.name}</span>
                     <span
-                      className={`ml-2 shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest ${
-                        p.status === "live"
+                      className={`ml-2 shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest ${p.status === "live"
                           ? "bg-emerald-500/10 text-emerald-500"
                           : p.status === "error"
                             ? "bg-red-500/10 text-red-500"
                             : "bg-surface text-muted-foreground"
-                      }`}
+                        }`}
                     >
                       {p.status}
                     </span>
@@ -163,10 +158,7 @@ function SuspendModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div
-        className="panel w-full max-w-sm overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="panel w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h3 className="font-display text-lg">Suspend user</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface">
@@ -395,11 +387,10 @@ function AdminUsers() {
               onClick={() => toggle(u)}
               disabled={working === u.id + ":admin"}
               title={u.is_admin ? "Remove admin" : "Make admin"}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition disabled:opacity-50 ${
-                u.is_admin
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition disabled:opacity-50 ${u.is_admin
                   ? "border-amber-500/40 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
                   : "border-border bg-surface text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               {u.is_admin ? (
                 <>
@@ -417,11 +408,10 @@ function AdminUsers() {
               onClick={() => (u.suspended_at ? doUnsuspend(u) : setSuspendTarget(u))}
               disabled={working === u.id + ":suspend"}
               title={u.suspended_at ? "Unsuspend" : "Suspend"}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition disabled:opacity-50 ${
-                u.suspended_at
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition disabled:opacity-50 ${u.suspended_at
                   ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
                   : "border-border bg-surface text-muted-foreground hover:border-red-500/40 hover:text-red-400"
-              }`}
+                }`}
             >
               {u.suspended_at ? (
                 <>

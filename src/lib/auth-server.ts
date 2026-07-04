@@ -59,7 +59,12 @@ function extractAccessToken(): string | null {
     const parsed = JSON.parse(sessionJson) as { access_token?: string };
     return parsed.access_token ?? null;
   } catch (e) {
-    console.error("[auth-server] failed to parse auth cookie:", e, "raw value length:", rawValue.length);
+    console.error(
+      "[auth-server] failed to parse auth cookie:",
+      e,
+      "raw value length:",
+      rawValue.length,
+    );
     return null;
   }
 }

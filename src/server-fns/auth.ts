@@ -88,7 +88,7 @@ export const signUpWithEmail = createServerFn({ method: "POST" })
 
         if (zombie) {
           console.log("[signup] zombie found, id:", zombie.id.slice(0, 8) + "..., deleting...");
-          await supabase.auth.admin.deleteUser(zombie.id).catch(() => {});
+          await supabase.auth.admin.deleteUser(zombie.id).catch(() => { });
           await supabase.auth.admin.createUser({ email: data.email, password: data.password, email_confirm: true });
           const { data: freshLink, error: freshErr } = await supabase.auth.admin.generateLink({ type: "magiclink", email: data.email });
           if (freshErr || !freshLink) {
@@ -119,7 +119,7 @@ export const signUpWithEmail = createServerFn({ method: "POST" })
       const { error: userCheckErr } = await supabase.auth.admin.getUserById(generatedUserId);
       if (userCheckErr) {
         console.log("[signup] getUserById-zombie, healing...");
-        await supabase.auth.admin.deleteUser(generatedUserId).catch(() => {});
+        await supabase.auth.admin.deleteUser(generatedUserId).catch(() => { });
         const { error: recreateErr } = await supabase.auth.admin.createUser({
           email: data.email,
           password: data.password,

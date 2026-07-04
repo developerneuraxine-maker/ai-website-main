@@ -66,7 +66,7 @@ export function AppSidebar({ isAdmin = false, plan }: { isAdmin?: boolean; plan?
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="px-3 py-4">
         <Link to="/dashboard" className="flex items-center gap-2.5 px-1.5">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-[var(--shadow-glow)]">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-(--shadow-glow)">
             <Sparkles className="h-4 w-4" strokeWidth={2.5} />
           </div>
           {!collapsed && (

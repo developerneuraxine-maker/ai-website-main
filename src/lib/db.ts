@@ -657,7 +657,10 @@ export async function adminSuspendUser(userId: string, reason: string) {
   const supabase = getSupabase();
   const { error } = await supabase
     .from("user_profiles")
-    .update({ suspended_at: new Date().toISOString(), suspended_reason: reason || "Suspended by admin" })
+    .update({
+      suspended_at: new Date().toISOString(),
+      suspended_reason: reason || "Suspended by admin",
+    })
     .eq("id", userId);
   if (error) throw error;
 }
@@ -729,7 +732,10 @@ export async function adminListUsersDetailed(): Promise<AdminUserDetail[]> {
     .in("user_id", ids)
     .is("deleted_at", null);
 
-  const projectsByUser = new Map<string, { id: string; name: string; status: string; created_at: string }[]>();
+  const projectsByUser = new Map<
+    string,
+    { id: string; name: string; status: string; created_at: string }[]
+  >();
   for (const p of projectRows ?? []) {
     if (!p.user_id) continue;
     const list = projectsByUser.get(p.user_id) ?? [];
@@ -766,10 +772,7 @@ export type ConnectorRow = {
 
 export async function listConnectors(userId: string): Promise<ConnectorRow[]> {
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("connectors")
-    .select()
-    .eq("user_id", userId);
+  const { data, error } = await supabase.from("connectors").select().eq("user_id", userId);
   if (error) throw error;
   return (data ?? []) as ConnectorRow[];
 }
@@ -783,20 +786,18 @@ export async function upsertConnector(
   expiresAt?: string,
 ) {
   const supabase = getSupabase();
-  const { error } = await supabase
-    .from("connectors")
-    .upsert(
-      {
-        user_id: userId,
-        provider,
-        access_token: accessToken,
-        refresh_token: refreshToken ?? null,
-        token_expires_at: expiresAt ?? null,
-        metadata,
-        connected_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,provider" },
-    );
+  const { error } = await supabase.from("connectors").upsert(
+    {
+      user_id: userId,
+      provider,
+      access_token: accessToken,
+      refresh_token: refreshToken ?? null,
+      token_expires_at: expiresAt ?? null,
+      metadata,
+      connected_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,provider" },
+  );
   if (error) throw error;
 }
 
@@ -810,12 +811,15 @@ export async function deleteConnector(userId: string, provider: string) {
   if (error) throw error;
 }
 
-// ---- Plans & daily usage ----
+// ---- Plans & monthly usage ----
 
-export const PLAN_DAILY_LIMIT_USD = {
-  free: 0.1, // $0.10/day
-  paid: 3.5, // $3.50/day
+export const PLAN_MONTHLY_LIMIT_USD = {
+  free: 0.1, // $0.10/month (~1-2 free generations to try the product)
+  paid: 2.0, // $2.00/month for Pro plan (₹500/month)
 } as const;
+
+// Keep old name as alias so no other file needs changes
+export const PLAN_DAILY_LIMIT_USD = PLAN_MONTHLY_LIMIT_USD;
 
 export type PlanType = "free" | "paid";
 
@@ -829,8 +833,9 @@ export type UserPlan = {
   is_paid_active: boolean;
 };
 
-function todayDateStr() {
-  return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+// Returns "YYYY-MM" — used to detect a new month and reset usage
+function currentMonthStr() {
+  return new Date().toISOString().slice(0, 7); // "YYYY-MM"
 }
 
 export async function getUserPlan(userId: string): Promise<UserPlan> {
@@ -842,34 +847,33 @@ export async function getUserPlan(userId: string): Promise<UserPlan> {
     .single();
   if (error) throw error;
 
-  const today = todayDateStr();
-  let dailyCost = data.daily_cost_usd ?? 0;
+  const thisMonth = currentMonthStr();
+  let monthlyCost = data.daily_cost_usd ?? 0;
 
-  // Reset counter if it's a new day
-  if ((data.daily_reset_date ?? "") < today) {
+  // Reset counter when a new month starts (daily_reset_date stores YYYY-MM-DD or YYYY-MM)
+  if ((data.daily_reset_date ?? "").slice(0, 7) < thisMonth) {
     await supabase
       .from("user_profiles")
-      .update({ daily_cost_usd: 0, daily_reset_date: today })
+      .update({ daily_cost_usd: 0, daily_reset_date: thisMonth })
       .eq("id", userId);
-    dailyCost = 0;
+    monthlyCost = 0;
   }
 
-  // Check if paid plan has expired → downgrade to free
   const isPaidActive =
     data.plan_type === "paid" &&
     (!data.plan_expires_at || new Date(data.plan_expires_at) > new Date());
 
   const effectivePlan: PlanType = isPaidActive ? "paid" : "free";
-  const limit = PLAN_DAILY_LIMIT_USD[effectivePlan];
-  const usagePct = Math.min(100, Math.round((dailyCost / limit) * 100));
+  const limit = PLAN_MONTHLY_LIMIT_USD[effectivePlan];
+  const usagePct = Math.min(100, Math.round((monthlyCost / limit) * 100));
 
   return {
     plan_type: effectivePlan,
     plan_expires_at: data.plan_expires_at,
-    daily_cost_usd: dailyCost,
+    daily_cost_usd: monthlyCost,
     daily_limit_usd: limit,
     usage_pct: usagePct,
-    limit_reached: dailyCost >= limit,
+    limit_reached: monthlyCost >= limit,
     is_paid_active: isPaidActive,
   };
 }
@@ -881,7 +885,7 @@ export async function checkDailyLimit(userId: string): Promise<{
   isPaidActive: boolean;
 }> {
   const supabase = getSupabase();
-  const today = todayDateStr();
+  const thisMonth = currentMonthStr();
 
   const { data, error } = await supabase
     .from("user_profiles")
@@ -891,25 +895,25 @@ export async function checkDailyLimit(userId: string): Promise<{
   if (error) throw error;
 
   let currentCost = data.daily_cost_usd ?? 0;
-  if ((data.daily_reset_date ?? "") < today) {
+  if ((data.daily_reset_date ?? "").slice(0, 7) < thisMonth) {
     currentCost = 0;
     await supabase
       .from("user_profiles")
-      .update({ daily_cost_usd: 0, daily_reset_date: today })
+      .update({ daily_cost_usd: 0, daily_reset_date: thisMonth })
       .eq("id", userId);
   }
 
   const isPaidActive =
     data.plan_type === "paid" &&
     (!data.plan_expires_at || new Date(data.plan_expires_at) > new Date());
-  const limit = PLAN_DAILY_LIMIT_USD[isPaidActive ? "paid" : "free"];
+  const limit = PLAN_MONTHLY_LIMIT_USD[isPaidActive ? "paid" : "free"];
 
   if (currentCost >= limit) {
     const planName = isPaidActive ? "Pro" : "Free";
     const hint = isPaidActive
-      ? "Your daily limit resets at midnight."
-      : "Upgrade to Pro for more, or wait for the free limit to reset at midnight.";
-    throw new Error(`You've reached today's ${planName} plan usage limit. ${hint}`);
+      ? "Your monthly limit resets on the 1st of next month."
+      : "Upgrade to Pro for more, or wait until next month for the free limit to reset.";
+    throw new Error(`You've reached this month's ${planName} plan usage limit. ${hint}`);
   }
 
   return { currentCost, limit, isPaidActive };
@@ -918,7 +922,7 @@ export async function checkDailyLimit(userId: string): Promise<{
 // Step 2: Record the actual cost AFTER the OpenAI call succeeds.
 export async function recordDailyUsage(userId: string, costUsd: number): Promise<void> {
   const supabase = getSupabase();
-  const today = todayDateStr();
+  const thisMonth = currentMonthStr();
 
   const { data } = await supabase
     .from("user_profiles")
@@ -926,11 +930,12 @@ export async function recordDailyUsage(userId: string, costUsd: number): Promise
     .eq("id", userId)
     .single();
 
-  const currentCost = (data?.daily_reset_date ?? "") < today ? 0 : (data?.daily_cost_usd ?? 0);
+  const currentCost =
+    (data?.daily_reset_date ?? "").slice(0, 7) < thisMonth ? 0 : (data?.daily_cost_usd ?? 0);
 
   await supabase
     .from("user_profiles")
-    .update({ daily_cost_usd: currentCost + costUsd, daily_reset_date: today })
+    .update({ daily_cost_usd: currentCost + costUsd, daily_reset_date: thisMonth })
     .eq("id", userId);
 }
 

@@ -2,8 +2,19 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Sparkles, ArrowRight, Loader2, Wand2, Upload, X, Plus,
-  Globe, ChevronDown, Check, Mic, MicOff, MessageSquare,
+  Sparkles,
+  ArrowRight,
+  Loader2,
+  Wand2,
+  Upload,
+  X,
+  Plus,
+  Globe,
+  ChevronDown,
+  Check,
+  Mic,
+  MicOff,
+  MessageSquare,
 } from "lucide-react";
 import { templates } from "@/lib/mock-data";
 import { styleReferences } from "@/lib/style-references";
@@ -12,6 +23,11 @@ import { uploadImage } from "@/server-fns/uploads";
 import { enhancePrompt } from "@/server-fns/enhance-prompt";
 import { clarifyPrompt } from "@/server-fns/clarify-prompt";
 import type { ClarificationQuestion } from "@/lib/openai";
+import { UpgradeModal } from "@/components/upgrade-modal";
+
+function isLimitError(e: unknown) {
+  return e instanceof Error && e.message.includes("reached this month's");
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -20,53 +36,125 @@ const MAX_IMAGES = 5;
 type ImageItem = { id: string; preview: string; url: string | null; uploading: boolean };
 
 const SUGGESTIONS = [
-  { emoji: "🍕", label: "Restaurant",  category: "Restaurant",  prompt: "Create a premium restaurant website with an animated hero, online reservations, seasonal menu, chef profiles, photo gallery, customer reviews, and contact form." },
-  { emoji: "💼", label: "Portfolio",   category: "Portfolio",   prompt: "Create a stunning creative portfolio with animated hero, interactive project showcase, about me section, skills, client testimonials, and contact form." },
-  { emoji: "🏢", label: "Business",   category: "Startup",     prompt: "Create a professional business website with services overview, team section, case studies, pricing plans, and a contact form." },
-  { emoji: "🚀", label: "AI Startup", category: "Startup",     prompt: "Create a cutting-edge AI startup landing page with animated hero, product demo section, feature highlights, pricing plans, testimonials, and a strong CTA." },
-  { emoji: "⚖️", label: "Law Firm",  category: "Agency",      prompt: "Create a professional law firm website with practice areas, attorney profiles, case results, client testimonials, and consultation booking." },
-  { emoji: "🏥", label: "Medical",    category: "Healthcare",  prompt: "Create a modern medical clinic website with services, doctor profiles, appointment booking, patient reviews, and contact information." },
-  { emoji: "🏨", label: "Hotel",      category: "Hotel",       prompt: "Create a luxury hotel website with stunning rooms gallery, amenities, dining options, booking system, local attractions, and reviews." },
-  { emoji: "🏡", label: "Real Estate",category: "Real Estate", prompt: "Create a premium real estate agency website with property listings, agent profiles, market insights, client testimonials, and contact." },
-  { emoji: "💪", label: "Gym",        category: "Fitness",     prompt: "Create an energetic fitness gym website with class schedule, trainer profiles, membership plans, transformation stories, and sign-up form." },
-  { emoji: "📚", label: "Education",  category: "Education",   prompt: "Create an online education platform with course catalog, instructor profiles, student success stories, pricing, and enrollment flow." },
-  { emoji: "🛍️", label: "Ecommerce", category: "Ecommerce",   prompt: "Create a modern ecommerce store with featured products, category navigation, promotional banners, customer reviews, and checkout flow." },
-  { emoji: "📊", label: "SaaS",       category: "Startup",     prompt: "Create a SaaS landing page with animated product walkthrough, feature grid, pricing tiers, integration logos, testimonials, and free trial CTA." },
+  {
+    emoji: "🍕",
+    label: "Restaurant",
+    category: "Restaurant",
+    prompt:
+      "Create a premium restaurant website with an animated hero, online reservations, seasonal menu, chef profiles, photo gallery, customer reviews, and contact form.",
+  },
+  {
+    emoji: "💼",
+    label: "Portfolio",
+    category: "Portfolio",
+    prompt:
+      "Create a stunning creative portfolio with animated hero, interactive project showcase, about me section, skills, client testimonials, and contact form.",
+  },
+  {
+    emoji: "🏢",
+    label: "Business",
+    category: "Startup",
+    prompt:
+      "Create a professional business website with services overview, team section, case studies, pricing plans, and a contact form.",
+  },
+  {
+    emoji: "🚀",
+    label: "AI Startup",
+    category: "Startup",
+    prompt:
+      "Create a cutting-edge AI startup landing page with animated hero, product demo section, feature highlights, pricing plans, testimonials, and a strong CTA.",
+  },
+  {
+    emoji: "⚖️",
+    label: "Law Firm",
+    category: "Agency",
+    prompt:
+      "Create a professional law firm website with practice areas, attorney profiles, case results, client testimonials, and consultation booking.",
+  },
+  {
+    emoji: "🏥",
+    label: "Medical",
+    category: "Healthcare",
+    prompt:
+      "Create a modern medical clinic website with services, doctor profiles, appointment booking, patient reviews, and contact information.",
+  },
+  {
+    emoji: "🏨",
+    label: "Hotel",
+    category: "Hotel",
+    prompt:
+      "Create a luxury hotel website with stunning rooms gallery, amenities, dining options, booking system, local attractions, and reviews.",
+  },
+  {
+    emoji: "🏡",
+    label: "Real Estate",
+    category: "Real Estate",
+    prompt:
+      "Create a premium real estate agency website with property listings, agent profiles, market insights, client testimonials, and contact.",
+  },
+  {
+    emoji: "💪",
+    label: "Gym",
+    category: "Fitness",
+    prompt:
+      "Create an energetic fitness gym website with class schedule, trainer profiles, membership plans, transformation stories, and sign-up form.",
+  },
+  {
+    emoji: "📚",
+    label: "Education",
+    category: "Education",
+    prompt:
+      "Create an online education platform with course catalog, instructor profiles, student success stories, pricing, and enrollment flow.",
+  },
+  {
+    emoji: "🛍️",
+    label: "Ecommerce",
+    category: "Ecommerce",
+    prompt:
+      "Create a modern ecommerce store with featured products, category navigation, promotional banners, customer reviews, and checkout flow.",
+  },
+  {
+    emoji: "📊",
+    label: "SaaS",
+    category: "Startup",
+    prompt:
+      "Create a SaaS landing page with animated product walkthrough, feature grid, pricing tiers, integration logos, testimonials, and free trial CTA.",
+  },
 ];
 
 const THEMES = [
-  { id: "modern",        label: "Modern",      desc: "Clean & contemporary" },
-  { id: "minimal",       label: "Minimal",     desc: "Less is more" },
-  { id: "luxury",        label: "Luxury",      desc: "Premium & elegant" },
-  { id: "corporate",     label: "Corporate",   desc: "Professional" },
-  { id: "startup",       label: "Startup",     desc: "Bold & energetic" },
-  { id: "glassmorphism", label: "Glass",       desc: "Frosted glass" },
-  { id: "cyberpunk",     label: "Cyberpunk",   desc: "Neon & futuristic" },
-  { id: "brutalist",     label: "Brutalist",   desc: "Bold & raw" },
-  { id: "apple",         label: "Apple Style", desc: "Polished & refined" },
+  { id: "modern", label: "Modern", desc: "Clean & contemporary" },
+  { id: "minimal", label: "Minimal", desc: "Less is more" },
+  { id: "luxury", label: "Luxury", desc: "Premium & elegant" },
+  { id: "corporate", label: "Corporate", desc: "Professional" },
+  { id: "startup", label: "Startup", desc: "Bold & energetic" },
+  { id: "glassmorphism", label: "Glass", desc: "Frosted glass" },
+  { id: "cyberpunk", label: "Cyberpunk", desc: "Neon & futuristic" },
+  { id: "brutalist", label: "Brutalist", desc: "Bold & raw" },
+  { id: "apple", label: "Apple Style", desc: "Polished & refined" },
 ];
 
 const PALETTES = [
-  { id: "lime",   label: "Lime",   bg: "#09090b", accent: "#a3e635" },
-  { id: "ocean",  label: "Ocean",  bg: "#06121c", accent: "#38bdf8" },
+  { id: "lime", label: "Lime", bg: "#09090b", accent: "#a3e635" },
+  { id: "ocean", label: "Ocean", bg: "#06121c", accent: "#38bdf8" },
   { id: "purple", label: "Purple", bg: "#120726", accent: "#a855f7" },
-  { id: "ember",  label: "Ember",  bg: "#140a00", accent: "#f97316" },
+  { id: "ember", label: "Ember", bg: "#140a00", accent: "#f97316" },
   { id: "forest", label: "Forest", bg: "#001a00", accent: "#22c55e" },
-  { id: "gold",   label: "Gold",   bg: "#100c00", accent: "#eab308" },
-  { id: "rose",   label: "Rose",   bg: "#1a0010", accent: "#f43f5e" },
-  { id: "light",  label: "Light",  bg: "#f5f5f5", accent: "#1a1a1a" },
-  { id: "mono",   label: "Mono",   bg: "#000000", accent: "#e5e5e5" },
+  { id: "gold", label: "Gold", bg: "#100c00", accent: "#eab308" },
+  { id: "rose", label: "Rose", bg: "#1a0010", accent: "#f43f5e" },
+  { id: "light", label: "Light", bg: "#f5f5f5", accent: "#1a1a1a" },
+  { id: "mono", label: "Mono", bg: "#000000", accent: "#e5e5e5" },
 ];
 
 const FONTS = [
-  { id: "inter",       label: "Inter" },
-  { id: "poppins",     label: "Poppins" },
-  { id: "outfit",      label: "Outfit" },
-  { id: "manrope",     label: "Manrope" },
-  { id: "montserrat",  label: "Montserrat" },
-  { id: "dm-sans",     label: "DM Sans" },
-  { id: "playfair",    label: "Playfair Display" },
-  { id: "satoshi",     label: "Satoshi" },
+  { id: "inter", label: "Inter" },
+  { id: "poppins", label: "Poppins" },
+  { id: "outfit", label: "Outfit" },
+  { id: "manrope", label: "Manrope" },
+  { id: "montserrat", label: "Montserrat" },
+  { id: "dm-sans", label: "DM Sans" },
+  { id: "playfair", label: "Playfair Display" },
+  { id: "satoshi", label: "Satoshi" },
 ];
 
 const GENERATION_STEPS = [
@@ -84,7 +172,10 @@ function GenerationOverlay({ active, prompt }: { active: boolean; prompt: string
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    if (!active) { setStep(0); return; }
+    if (!active) {
+      setStep(0);
+      return;
+    }
     const DELAYS = [2800, 2200, 3200, 3800, 3000, 2500];
     const timers: ReturnType<typeof setTimeout>[] = [];
     let cur = 0;
@@ -149,6 +240,14 @@ function GenerationOverlay({ active, prompt }: { active: boolean; prompt: string
               {GENERATION_STEPS.map((label, i) => {
                 const done = i < step;
                 const current = i === step;
+                let badgeClassName = "border border-border text-muted-foreground";
+
+                if (done) {
+                  badgeClassName = "bg-primary text-primary-foreground";
+                } else if (current) {
+                  badgeClassName = "border border-primary text-primary";
+                }
+
                 return (
                   <motion.div
                     key={label}
@@ -158,17 +257,13 @@ function GenerationOverlay({ active, prompt }: { active: boolean; prompt: string
                     className="flex items-center gap-3"
                   >
                     <div
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors duration-300 ${
-                        done
-                          ? "bg-primary text-primary-foreground"
-                          : current
-                          ? "border border-primary text-primary"
-                          : "border border-border text-muted-foreground"
-                      }`}
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors duration-300 ${badgeClassName}`}
                     >
                       {done ? <Check className="h-3 w-3" /> : i + 1}
                     </div>
-                    <span className={`text-sm transition-colors ${i <= step ? "text-foreground" : "text-muted-foreground"}`}>
+                    <span
+                      className={`text-sm transition-colors ${i <= step ? "text-foreground" : "text-muted-foreground"}`}
+                    >
                       {label}
                       {current && (
                         <span className="ml-1 inline-flex gap-px">
@@ -206,10 +301,22 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 // ─── Voice Input Hook (Web Speech API) ───────────────────────────────────────
+type SpeechRecognition = {
+  start: () => void;
+  stop: () => void;
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onstart: (() => void) | null;
+  onresult: ((event: { results: { [n: number]: { [n: number]: { transcript: string } } } }) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+};
+
 function useVoiceInput(onResult: (text: string) => void) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const recognitionRef = useRef<unknown>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const supported =
     typeof window !== "undefined" &&
@@ -217,7 +324,7 @@ function useVoiceInput(onResult: (text: string) => void) {
 
   const stop = useCallback(() => {
     if (recognitionRef.current) {
-      (recognitionRef.current as { stop: () => void }).stop();
+      recognitionRef.current.stop();
       recognitionRef.current = null;
     }
     setListening(false);
@@ -229,9 +336,17 @@ function useVoiceInput(onResult: (text: string) => void) {
       return;
     }
     setError(null);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SpeechRecognition = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    const rec = new SpeechRecognition();
+    type SpeechRecognitionConstructor = new () => SpeechRecognition;
+    const win = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    const SpeechRecognitionClass = win.SpeechRecognition ?? win.webkitSpeechRecognition;
+    if (!SpeechRecognitionClass) {
+      setError("Voice input not supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+    const rec = new SpeechRecognitionClass();
     rec.lang = "en-US";
     rec.continuous = false;
     rec.interimResults = false;
@@ -243,7 +358,8 @@ function useVoiceInput(onResult: (text: string) => void) {
       stop();
     };
     rec.onerror = (e: { error: string }) => {
-      if (e.error === "not-allowed") setError("Microphone access denied. Allow it in browser settings.");
+      if (e.error === "not-allowed")
+        setError("Microphone access denied. Allow it in browser settings.");
       else if (e.error !== "aborted") setError("Voice recognition error. Try again.");
       setListening(false);
     };
@@ -319,10 +435,7 @@ function ClarificationModal({
             <p className="font-semibold text-sm">A few quick questions</p>
             <p className="text-xs text-muted-foreground">Help us build exactly what you need</p>
           </div>
-          <button
-            onClick={onSkip}
-            className="ml-auto text-muted-foreground hover:text-foreground"
-          >
+          <button onClick={onSkip} className="ml-auto text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -332,24 +445,28 @@ function ClarificationModal({
           {questions.map((q, qi) => (
             <div key={q.id}>
               <p className="mb-2.5 text-sm font-medium">
-                <span className="mr-1.5 font-mono text-[10px] text-muted-foreground">{qi + 1}.</span>
+                <span className="mr-1.5 font-mono text-[10px] text-muted-foreground">
+                  {qi + 1}.
+                </span>
                 {q.question}
               </p>
               <div className="flex flex-wrap gap-2">
                 {q.options.map((opt) => {
                   const isOther = opt === OTHER;
                   const selected = answers[q.id]?.selected === opt;
+                  let buttonClass =
+                    "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground";
+                  if (selected) {
+                    buttonClass = "border-primary bg-primary/10 text-primary";
+                  } else if (isOther) {
+                    buttonClass =
+                      "border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground";
+                  }
                   return (
                     <button
                       key={opt}
                       onClick={() => setSelected(q.id, opt)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
-                        selected
-                          ? "border-primary bg-primary/10 text-primary"
-                          : isOther
-                          ? "border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                      }`}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${buttonClass}`}
                     >
                       {selected && !isOther && <Check className="mr-1 inline h-3 w-3" />}
                       {opt}
@@ -384,10 +501,7 @@ function ClarificationModal({
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border px-6 py-4">
-          <button
-            onClick={onSkip}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
+          <button onClick={onSkip} className="text-xs text-muted-foreground hover:text-foreground">
             Skip and generate anyway
           </button>
           <button
@@ -452,11 +566,14 @@ function NewProject() {
   // Generation
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Clarification questions
   const [clarifying, setClarifying] = useState(false);
   const [clarifyQuestions, setClarifyQuestions] = useState<ClarificationQuestion[] | null>(null);
-  const [pendingGenerateData, setPendingGenerateData] = useState<Parameters<typeof createProject>[0]["data"] | null>(null);
+  const [pendingGenerateData, setPendingGenerateData] = useState<
+    Parameters<typeof createProject>[0]["data"] | null
+  >(null);
 
   const anyUploading = images.some((img) => img.uploading);
   const activePrompt = enhancedPrompt ?? prompt;
@@ -472,11 +589,20 @@ function NewProject() {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
     const remaining = MAX_IMAGES - images.length;
-    if (remaining <= 0) { setImageError(`Maximum ${MAX_IMAGES} images allowed.`); return; }
+    if (remaining <= 0) {
+      setImageError(`Maximum ${MAX_IMAGES} images allowed.`);
+      return;
+    }
     const toAdd = fileArray.slice(0, remaining);
     for (const file of toAdd) {
-      if (!file.type.startsWith("image/")) { setImageError("Please choose image files only."); return; }
-      if (file.size > MAX_IMAGE_BYTES) { setImageError(`"${file.name}" exceeds 5 MB.`); return; }
+      if (!file.type.startsWith("image/")) {
+        setImageError("Please choose image files only.");
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        setImageError(`"${file.name}" exceeds 5 MB.`);
+        return;
+      }
     }
     setImageError(null);
     const newItems: ImageItem[] = toAdd.map((file) => ({
@@ -491,8 +617,12 @@ function NewProject() {
         const item = newItems[i];
         try {
           const base64 = await fileToBase64(file);
-          const { url } = await uploadImage({ data: { base64, fileName: file.name, contentType: file.type } });
-          setImages((prev) => prev.map((img) => img.id === item.id ? { ...img, url, uploading: false } : img));
+          const { url } = await uploadImage({
+            data: { base64, fileName: file.name, contentType: file.type },
+          });
+          setImages((prev) =>
+            prev.map((img) => (img.id === item.id ? { ...img, url, uploading: false } : img)),
+          );
         } catch (e) {
           setImages((prev) => prev.filter((img) => img.id !== item.id));
           setImageError(e instanceof Error ? e.message : "Upload failed.");
@@ -511,7 +641,10 @@ function NewProject() {
     setEnhanceError(null);
     try {
       const result = await enhancePrompt({ data: { prompt: base } });
-      if (result.error) { setEnhanceError(result.error); return; }
+      if (result.error) {
+        setEnhanceError(result.error);
+        return;
+      }
       if (result.enhanced) setEnhancedPrompt(result.enhanced);
     } catch (e) {
       setEnhanceError(e instanceof Error ? e.message : "Enhancement failed.");
@@ -541,7 +674,13 @@ function NewProject() {
       });
       navigate({ to: "/projects/$id", params: { id } });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Generation failed. Check your API keys and try again.");
+      if (isLimitError(e)) {
+        setShowUpgrade(true);
+      } else {
+        setError(
+          e instanceof Error ? e.message : "Generation failed. Check your API keys and try again.",
+        );
+      }
       setGenerating(false);
     }
   };
@@ -575,7 +714,12 @@ function NewProject() {
       if (result.needsClarification) {
         setPendingGenerateData({
           prompt: activePrompt,
-          category, palette, theme, font, motion: "Cinematic", language,
+          category,
+          palette,
+          theme,
+          font,
+          motion: "Cinematic",
+          language,
           referenceUrl: referenceUrl.trim() || undefined,
           imageUrls: images.filter((img) => img.url).map((img) => img.url!),
           styleReferenceId: styleRefId,
@@ -592,10 +736,20 @@ function NewProject() {
     await runGenerate(activePrompt);
   };
 
-  const LANGUAGES = ["English (US)", "French", "Japanese", "Spanish", "Hindi", "Arabic", "Portuguese", "German"];
+  const LANGUAGES = [
+    "English (US)",
+    "French",
+    "Japanese",
+    "Spanish",
+    "Hindi",
+    "Arabic",
+    "Portuguese",
+    "German",
+  ];
 
   return (
     <>
+      <UpgradeModal open={showUpgrade} onClose={() => setShowUpgrade(false)} />
       <GenerationOverlay active={generating} prompt={activePrompt} />
 
       {/* Clarification Modal */}
@@ -613,7 +767,6 @@ function NewProject() {
       </AnimatePresence>
 
       <div className="mx-auto max-w-3xl px-6 py-12">
-
         {/* ── Header ────────────────────────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -626,7 +779,9 @@ function NewProject() {
             AI Website Builder
           </div>
           <h1 className="font-display text-5xl leading-tight tracking-tight">
-            What do you want<br />to build today?
+            What do you want
+            <br />
+            to build today?
           </h1>
           <p className="mt-3 text-muted-foreground">
             Describe your website in plain language — AI handles the rest.
@@ -682,7 +837,10 @@ function NewProject() {
                   </div>
                   <div className="flex gap-3 border-t border-primary/10 px-3 py-2">
                     <button
-                      onClick={() => { setPrompt(enhancedPrompt); setEnhancedPrompt(null); }}
+                      onClick={() => {
+                        setPrompt(enhancedPrompt);
+                        setEnhancedPrompt(null);
+                      }}
                       className="text-xs text-primary hover:underline"
                     >
                       Use as prompt
@@ -711,9 +869,15 @@ function NewProject() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-primary/40 hover:text-primary disabled:opacity-50"
             >
               {isEnhancing ? (
-                <><Loader2 className="h-3 w-3 animate-spin" /> Enhancing…</>
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Enhancing…
+                </>
               ) : (
-                <><Wand2 className="h-3 w-3" /> Enhance</>
+                <>
+                  <Wand2 className="h-3 w-3" />
+                  Enhance
+                </>
               )}
             </button>
 
@@ -738,7 +902,10 @@ function NewProject() {
                     Listening…
                   </>
                 ) : (
-                  <><Mic className="h-3 w-3" /> Voice</>
+                  <>
+                    <Mic className="h-3 w-3" />
+                    Voice
+                  </>
                 )}
               </button>
             )}
@@ -770,11 +937,19 @@ function NewProject() {
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
               {generating ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Generating…
+                </>
               ) : clarifying ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…</>
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Checking…
+                </>
               ) : (
-                <>Generate <ArrowRight className="h-3.5 w-3.5" /></>
+                <>
+                  Generate <ArrowRight className="h-3.5 w-3.5" />
+                </>
               )}
             </button>
           </div>
@@ -789,8 +964,13 @@ function NewProject() {
                 className="overflow-hidden"
               >
                 <div className="flex items-center justify-between border-t border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-                  <span><MicOff className="mr-1.5 inline h-3 w-3" />{voiceInput.error}</span>
-                  <button onClick={voiceInput.clearError}><X className="h-3 w-3" /></button>
+                  <span>
+                    <MicOff className="mr-1.5 inline h-3 w-3" />
+                    {voiceInput.error}
+                  </span>
+                  <button onClick={voiceInput.clearError}>
+                    <X className="h-3 w-3" />
+                  </button>
                 </div>
               </motion.div>
             )}
@@ -1098,7 +1278,9 @@ function NewProject() {
             className="group inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-base font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50"
           >
             {generating ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Generating…
+              </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
@@ -1108,7 +1290,6 @@ function NewProject() {
             )}
           </button>
         </motion.div>
-
       </div>
     </>
   );

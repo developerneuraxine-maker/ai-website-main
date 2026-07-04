@@ -223,8 +223,7 @@ export type ClarificationQuestion = {
 };
 
 export type ClarificationResult =
-  | { needsClarification: false }
-  | { needsClarification: true; questions: ClarificationQuestion[] };
+  { needsClarification: false } | { needsClarification: true; questions: ClarificationQuestion[] };
 
 // Analyzes a prompt to decide if clarifying questions are needed before generation.
 // Uses gpt-4o-mini for speed and low cost — this runs before every generation attempt.
@@ -459,12 +458,16 @@ export async function generateSite(opts: {
     opts.font ? `Primary font family: ${opts.font} (import from Google Fonts)` : null,
     `Motion / animation level: ${opts.motion}`,
     `Language for all copy: ${opts.language}`,
-    opts.referenceUrl ? `Reference website for style inspiration (match its visual language, not content): ${opts.referenceUrl}` : null,
+    opts.referenceUrl
+      ? `Reference website for style inspiration (match its visual language, not content): ${opts.referenceUrl}`
+      : null,
     ``,
     `Design bar: this must look like it was built by a $50k/project design studio.`,
     `Use the full design system from the system prompt — typography, glow orbs, glassmorphism cards, gradient text, scroll animations, and all mandatory sections.`,
     `Make the copy specific and compelling for this exact business type — no generic filler.`,
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   let systemPrompt = SYSTEM_PROMPT;
   const urls = opts.imageUrls?.filter(Boolean) ?? [];
@@ -478,7 +481,11 @@ export async function generateSite(opts: {
     systemPrompt += `\n\nSTYLE REFERENCE — "${opts.styleReference.name}": The code below is from the user's own previous project. Study ONLY its visual patterns: layout rhythm, spacing scale, typography choices, color depth, card polish, shadow treatment, glassmorphism, gradients. Match or exceed that quality level. Do NOT copy any business name, copy, contact info, or images — write entirely new content.\nNote: the reference may use Tailwind v4 @theme syntax which the CDN script does NOT support. Translate values to CSS custom properties or Tailwind arbitrary-value classes instead.\n\n--- STYLE REFERENCE ---\n${opts.styleReference.code}\n--- END STYLE REFERENCE ---`;
   }
   if (opts.integrations) {
-    const hasAny = opts.integrations.hasGmail || opts.integrations.hasSheets || opts.integrations.hasCalendar || opts.integrations.hasRazorpay;
+    const hasAny =
+      opts.integrations.hasGmail ||
+      opts.integrations.hasSheets ||
+      opts.integrations.hasCalendar ||
+      opts.integrations.hasRazorpay;
     if (hasAny) {
       systemPrompt += `\n\n${buildIntegrationPrompt(opts.integrations)}`;
     }
@@ -503,7 +510,10 @@ export async function generateSite(opts: {
   const raw = completion.choices[0]?.message?.content ?? "";
   const inputTokens = completion.usage?.prompt_tokens ?? 0;
   const outputTokens = completion.usage?.completion_tokens ?? 0;
-  return { html: injectNeuraxineBadge(extractHtml(raw)), costUsd: estimateCostUsd(model, inputTokens, outputTokens) };
+  return {
+    html: injectNeuraxineBadge(extractHtml(raw)),
+    costUsd: estimateCostUsd(model, inputTokens, outputTokens),
+  };
 }
 
 export async function reviseSite(opts: {
@@ -525,5 +535,8 @@ export async function reviseSite(opts: {
   const raw = completion.choices[0]?.message?.content ?? "";
   const inputTokens = completion.usage?.prompt_tokens ?? 0;
   const outputTokens = completion.usage?.completion_tokens ?? 0;
-  return { html: injectNeuraxineBadge(extractHtml(raw)), costUsd: estimateCostUsd(model, inputTokens, outputTokens) };
+  return {
+    html: injectNeuraxineBadge(extractHtml(raw)),
+    costUsd: estimateCostUsd(model, inputTokens, outputTokens),
+  };
 }

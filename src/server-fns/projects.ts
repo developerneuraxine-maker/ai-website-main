@@ -20,6 +20,9 @@ import {
   softDeleteProject,
 } from "@/lib/db";
 
+// Owner account — bypasses all usage limits and always gets full generation.
+const OWNER_EMAIL = "socialsprouts1@gmail.com";
+
 export const createProject = createServerFn({ method: "POST" })
   .validator(
     (d: {
@@ -42,10 +45,15 @@ export const createProject = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireUser();
 
-    // Check daily limit BEFORE calling OpenAI to avoid wasting API cost.
-    // currentCost===0 + free plan → deliver a partial "preview" site to stay within $0.10.
-    const { currentCost, isPaidActive } = await checkDailyLimit(user.id);
-    const freePreview = !isPaidActive && currentCost === 0;
+    const isOwner = user.email === OWNER_EMAIL;
+    let freePreview = false;
+
+    if (!isOwner) {
+      // Check daily limit BEFORE calling OpenAI to avoid wasting API cost.
+      // currentCost===0 + free plan → deliver a partial "preview" site to stay within $0.10.
+      const { currentCost, isPaidActive } = await checkDailyLimit(user.id);
+      freePreview = !isPaidActive && currentCost === 0;
+    }
 
     const ref = getStyleReference(data.styleReferenceId);
 
@@ -114,8 +122,8 @@ export const reviseProject = createServerFn({ method: "POST" })
       throw new Error("Project not found");
     }
 
-    // Check daily limit BEFORE calling OpenAI.
-    await checkDailyLimit(user.id);
+    // Check daily limit BEFORE calling OpenAI (owner is exempt).
+    if (user.email !== OWNER_EMAIL) await checkDailyLimit(user.id);
 
     await addProjectMessage(data.id, "you", data.instruction);
     const { html, costUsd } = await reviseSite({

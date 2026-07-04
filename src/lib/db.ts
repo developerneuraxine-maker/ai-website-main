@@ -852,11 +852,10 @@ export async function getUserPlan(userId: string): Promise<UserPlan> {
   const thisMonth = currentMonthStr();
   let monthlyCost = data.daily_cost_usd ?? 0;
 
-  // Reset counter when a new month starts (daily_reset_date stores YYYY-MM-DD or YYYY-MM)
   if ((data.daily_reset_date ?? "").slice(0, 7) < thisMonth) {
     await supabase
       .from("user_profiles")
-      .update({ daily_cost_usd: 0, daily_reset_date: thisMonth })
+      .update({ daily_cost_usd: 0, daily_reset_date: thisMonth + "-01" })
       .eq("id", userId);
     monthlyCost = 0;
   }
@@ -903,7 +902,7 @@ export async function checkDailyLimit(userId: string): Promise<{
     currentCost = 0;
     await supabase
       .from("user_profiles")
-      .update({ daily_cost_usd: 0, daily_reset_date: thisMonth })
+      .update({ daily_cost_usd: 0, daily_reset_date: thisMonth + "-01" })
       .eq("id", userId);
   }
 
@@ -944,7 +943,7 @@ export async function recordDailyUsage(userId: string, costUsd: number): Promise
 
   const { error: updateError } = await supabase
     .from("user_profiles")
-    .update({ daily_cost_usd: currentCost + effectiveCost, daily_reset_date: thisMonth })
+    .update({ daily_cost_usd: currentCost + effectiveCost, daily_reset_date: thisMonth + "-01" })
     .eq("id", userId);
 
   if (updateError)

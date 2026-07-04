@@ -168,7 +168,7 @@ export function AppSidebar({ isAdmin = false, plan }: { isAdmin?: boolean; plan?
             <div className="rounded-lg border border-border bg-surface p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Today's usage
+                  Monthly usage
                 </span>
                 <span
                   className={`font-mono text-[10px] ${usagePct >= 90 ? "text-orange-500" : "text-muted-foreground"}`}
@@ -184,7 +184,7 @@ export function AppSidebar({ isAdmin = false, plan }: { isAdmin?: boolean; plan?
               </div>
               {plan.limit_reached && !plan.is_paid_active && (
                 <div className="mt-2 text-[10px] text-orange-500">
-                  Limit reached · resets midnight
+                  Limit reached · resets next month
                 </div>
               )}
             </div>

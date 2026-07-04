@@ -7,16 +7,22 @@ import {
   inviteWorkspaceMember,
   removeWorkspaceMemberFn,
 } from "@/server-fns/workspace";
+import { fetchProfile } from "@/server-fns/profile";
 import type { WorkspaceMemberRow } from "@/lib/db";
 
 export const Route = createFileRoute("/_app/workspace")({
-  loader: async () => fetchWorkspaceMembers(),
+  loader: async () => {
+    const [members, profile] = await Promise.all([fetchWorkspaceMembers(), fetchProfile()]);
+    const workspaceName =
+      profile.full_name?.trim() || profile.username?.trim() || "My Workspace";
+    return { members, workspaceName };
+  },
   head: () => ({ meta: [{ title: "Workspace · Lumen" }] }),
   component: Workspace,
 });
 
 function Workspace() {
-  const initial = Route.useLoaderData();
+  const { members: initial, workspaceName } = Route.useLoaderData();
   const [members, setMembers] = useState<WorkspaceMemberRow[]>(initial);
   const [inviting, setInviting] = useState(false);
 
@@ -43,7 +49,7 @@ function Workspace() {
     <div className="mx-auto max-w-5xl px-6 py-10">
       <PageHeader
         eyebrow="Team"
-        title="Studio Nord"
+        title={workspaceName}
         description={`Shared workspace · ${members.length} member${members.length === 1 ? "" : "s"}`}
         actions={
           <button

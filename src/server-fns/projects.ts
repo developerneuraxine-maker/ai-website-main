@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { generateSite, reviseSite } from "@/lib/openai";
 import { getStyleReference } from "@/lib/style-references";
 import { requireUser } from "@/lib/auth-server";
+import { generateUserToken } from "@/lib/integrate";
 import {
   addProjectMessage,
   checkDailyLimit,
@@ -49,12 +50,14 @@ export const createProject = createServerFn({ method: "POST" })
     // Fetch connectors to pass integration context to the AI
     const connectors = await listConnectors(user.id);
     const hasGoogle = connectors.some((c) => c.provider === "google");
+    const integrationToken = await generateUserToken(user.id);
     const integrations = {
       userId: user.id,
       hasGmail: hasGoogle,
       hasSheets: hasGoogle,
       hasCalendar: hasGoogle,
       hasRazorpay: connectors.some((c) => c.provider === "razorpay"),
+      integrationToken: integrationToken || undefined,
     };
 
     const { html, costUsd } = await generateSite({
@@ -117,7 +120,7 @@ export const reviseProject = createServerFn({ method: "POST" })
       instruction: data.instruction,
     });
     await recordDailyUsage(user.id, costUsd);
-    await reviseProjectRecord(data.id, html, data.instruction.slice(0, 80));
+    await reviseProjectRecord(data.id, html, data.instruction.slice(0, 80), user.id);
     const aiReply = `Updated. ${data.instruction}`;
     await addProjectMessage(data.id, "ai", aiReply);
     return { html, aiReply };

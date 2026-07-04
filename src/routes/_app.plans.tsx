@@ -248,7 +248,7 @@ function Plans() {
             <span className="text-sm text-muted-foreground">/ month</span>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Start building. AI usage resets daily.
+            Start building. AI usage resets monthly.
           </p>
           <ul className="mt-5 space-y-2 text-sm">
             {freeFeatures.map((f) => (

@@ -82,9 +82,7 @@ export function UpgradeModal({ open, onClose }: { open: boolean; onClose: () => 
 
               {/* CTA */}
               <a
-                href="https://www.neuraxine.com"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/plans"
                 className="block w-full rounded-xl bg-linear-to-r from-violet-600 to-purple-500 py-3 text-center text-sm font-bold text-white shadow-lg shadow-purple-900/30 transition hover:opacity-90"
               >
                 Upgrade to Pro →

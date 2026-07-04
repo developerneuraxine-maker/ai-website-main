@@ -86,7 +86,7 @@ function UserDetailModal({ user, onClose }: { user: AdminUserDetail; onClose: ()
             </div>
             <div>
               <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                AI Cost (today)
+                AI Cost (month)
               </div>
               <div className="mt-1">${(user.daily_cost_usd ?? 0).toFixed(4)}</div>
             </div>

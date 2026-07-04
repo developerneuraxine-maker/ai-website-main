@@ -379,10 +379,15 @@ export type IntegrationContext = {
   hasSheets: boolean;
   hasCalendar: boolean;
   hasRazorpay: boolean;
+  integrationToken?: string;
 };
 
 function buildIntegrationPrompt(ctx: IntegrationContext): string {
   const base = (process.env.APP_URL ?? "https://websitebuilder.neuraxine.com").replace(/\/$/, "");
+  const tokenLine = ctx.integrationToken
+    ? `  REQUIRED header on every fetch: "X-Integration-Token": "${ctx.integrationToken}"`
+    : "";
+
   const lines: string[] = [
     "════════════════════════════════════════",
     "CONNECTOR INTEGRATIONS (use only when the request calls for it)",
@@ -390,7 +395,7 @@ function buildIntegrationPrompt(ctx: IntegrationContext): string {
     "The following API endpoints are available for this user's website.",
     "Use fetch() to call them client-side when appropriate (contact form, booking, payment, etc.).",
     "All endpoints accept Content-Type: application/json and return { ok: true, ... } or { ok: false, error: '...' }.",
-    "",
+    ...(tokenLine ? [tokenLine, ""] : [""]),
   ];
 
   if (ctx.hasGmail) {

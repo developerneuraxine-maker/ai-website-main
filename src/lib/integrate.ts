@@ -3,8 +3,51 @@ import { getSupabase } from "./supabase";
 export const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, X-Integration-Token",
 };
+
+// Derive a deterministic per-user token from INTEGRATION_SECRET env var.
+// Embedded in generated HTML so the AI can include it in fetch calls.
+// If INTEGRATION_SECRET is not set, returns "" (tokens disabled).
+export async function generateUserToken(userId: string): Promise<string> {
+  const secret = process.env.INTEGRATION_SECRET;
+  if (!secret) return "";
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(userId));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 24);
+}
+
+// Validate the incoming integration request:
+// 1. userId must exist in user_profiles and not be suspended.
+// 2. If X-Integration-Token header is present, it must match the expected token.
+async function verifyIntegrationRequest(userId: string, request: Request): Promise<Response | null> {
+  const { data: profile } = await getSupabase()
+    .from("user_profiles")
+    .select("id")
+    .eq("id", userId)
+    .is("suspended_at", null)
+    .maybeSingle();
+
+  if (!profile) return jsonErr("Not found", 404);
+
+  const provided = request.headers.get("X-Integration-Token");
+  if (provided !== null) {
+    const expected = await generateUserToken(userId);
+    if (!expected || provided !== expected) return jsonErr("Unauthorized", 403);
+  }
+
+  return null;
+}
 
 function jsonErr(msg: string, status = 400): Response {
   return new Response(JSON.stringify({ ok: false, error: msg }), {
@@ -217,6 +260,10 @@ export async function handleIntegrationRequest(
   const match = pathname.match(/^\/api\/integrate\/([^/]+)\/([^/]+)$/);
   if (!match) return jsonErr("Invalid integration URL", 404);
   const [, userId, action] = match;
+
+  // Validate caller — check userId exists and verify token if provided
+  const authError = await verifyIntegrationRequest(userId, request);
+  if (authError) return authError;
 
   let body: unknown;
   try {

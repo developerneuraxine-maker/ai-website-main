@@ -194,6 +194,7 @@ export async function reviseProjectRecord(
   projectId: string,
   newHtml: string,
   versionLabel: string,
+  userId?: string,
 ) {
   const supabase = getSupabase();
   const { error: updateError } = await supabase
@@ -204,6 +205,7 @@ export async function reviseProjectRecord(
 
   const { error: versionError } = await supabase.from("project_versions").insert({
     project_id: projectId,
+    user_id: userId ?? null,
     label: versionLabel,
     author: "AI",
     html_snapshot: newHtml,
@@ -505,7 +507,7 @@ export async function restoreVersion(versionId: string, userId: string) {
     throw new Error("Version not found");
   }
 
-  await reviseProjectRecord(row.project_id, row.html_snapshot, `Restored: ${row.label}`);
+  await reviseProjectRecord(row.project_id, row.html_snapshot, `Restored: ${row.label}`, userId);
 }
 
 async function projectNameMap(projectIds: string[]) {

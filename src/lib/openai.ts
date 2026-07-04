@@ -209,6 +209,59 @@ Write all copy in the requested language.
 • Semantic HTML5 (nav, main, section, article, footer)
 • One <h1> in the hero only; all other top-level headings are <h2>`;
 
+const FREE_PREVIEW_SYSTEM_PROMPT = `You are an elite UI/UX designer and senior frontend engineer. Build a beautiful PREVIEW of the requested website — a stunning teaser with 3 sections, ending with an upgrade paywall.
+
+════════════════════════════════════════
+OUTPUT RULE (NON-NEGOTIABLE)
+════════════════════════════════════════
+Output ONLY the raw HTML document — zero markdown, zero commentary, zero code fences.
+Begin with <!doctype html> and close with </html>. Nothing before, nothing after.
+
+════════════════════════════════════════
+SECTIONS TO BUILD (exactly these 4, in order)
+════════════════════════════════════════
+
+1. NAVIGATION (sticky):
+   • backdrop-filter: blur(20px); background: rgba(bg, 0.85);
+   • Logo left | 2 nav links center | "Upgrade to Pro" CTA button right
+   • CTA button: gradient, rounded-full
+
+2. HERO SECTION (min-height: 92vh, flex center):
+   • Large bold headline (72–96px) with 1 gradient-text span
+   • 2–3 sentence subheadline (muted, max-width 540px)
+   • 2 CTA buttons: primary gradient + secondary ghost
+   • Background: multi-stop gradient + 2–3 floating glow orbs (position absolute, blur 80px)
+   • A floating CSS-only visual element (cards with fake stats or abstract shapes)
+
+3. FEATURES SECTION:
+   • Section heading + short paragraph
+   • 3 feature cards in CSS Grid (auto-fit, minmax(260px, 1fr))
+   • Glassmorphism cards with gradient icon, bold title, description
+   • Hover: translateY(-6px) + stronger shadow
+
+4. PAYWALL SECTION (full-width, centered content, 120px padding):
+   • Background: gradient using the site's primary colors
+   • At the top: 3 blurred "locked content" placeholder bars styled like section previews:
+     <div style="filter:blur(6px);opacity:0.35;margin-bottom:24px;background:rgba(255,255,255,0.08);border-radius:16px;height:80px;width:100%;max-width:700px;margin:0 auto 8px"></div>
+     (repeat 3 times with different widths: 100%, 80%, 60%)
+   • Lock icon: <div style="font-size:56px;margin:24px 0 12px">🔒</div>
+   • Headline (32–40px, bold): "Your full website is ready"
+   • Subtext (16px, muted): "Upgrade to Pro to unlock pricing tables, testimonials, process steps, contact form, and the complete footer."
+   • Stats bar: "3 sections preview · 7+ sections locked · Unlimited on Pro"
+   • Big gradient CTA button (padding: 16px 40px): "Upgrade to Pro — ₹500/month →" href="https://websitebuilder.neuraxine.com/billing"
+   • Below button (smaller muted text): "Cancel anytime · Instant access"
+
+════════════════════════════════════════
+DESIGN QUALITY (apply to all 4 sections)
+════════════════════════════════════════
+• Import 2 Google Fonts matching the business mood
+• CSS custom properties on :root for all colors
+• Responsive: mobile breakpoint at 768px, hero headline 40–48px on mobile
+• NEVER use opacity:0 — all content visible from first paint
+• Animations: only transform (translateY, scale) — never opacity
+
+Close with </body></html> after the paywall section.`;
+
 const REVISE_SYSTEM_PROMPT = `You are an elite frontend engineer. You will receive an existing website HTML and an instruction to apply.
 Apply ONLY the requested change — preserve all other design decisions, styles, and content exactly.
 Output ONLY the complete updated raw HTML document. No markdown, no commentary, nothing before <!doctype html> or after </html>.`;
@@ -453,6 +506,7 @@ export async function generateSite(opts: {
   imageUrls?: string[];
   styleReference?: { name: string; code: string };
   integrations?: IntegrationContext;
+  freePreview?: boolean;
 }): Promise<GenerateResult> {
   const userMessage = [
     `Build a stunning, award-worthy website for this request:`,
@@ -475,7 +529,8 @@ export async function generateSite(opts: {
     .filter(Boolean)
     .join("\n");
 
-  let systemPrompt = SYSTEM_PROMPT;
+  let systemPrompt = opts.freePreview ? FREE_PREVIEW_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const maxTokens = opts.freePreview ? 3000 : 16384;
   const urls = opts.imageUrls?.filter(Boolean) ?? [];
   if (urls.length === 1) {
     systemPrompt += `\n\nIMAGE REFERENCE: The user provided a reference image at this URL: ${urls[0]}\nUse it directly in an <img src="${urls[0]}" alt="..."> in the hero or a fitting gallery section — it resolves safely. Also draw the color/mood of the design from this image.`;
@@ -507,7 +562,7 @@ export async function generateSite(opts: {
   const model = getModel();
   const completion = await getClient().chat.completions.create({
     model,
-    max_completion_tokens: 16384,
+    max_completion_tokens: maxTokens,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },

@@ -43,7 +43,9 @@ export const createProject = createServerFn({ method: "POST" })
     const user = await requireUser();
 
     // Check daily limit BEFORE calling OpenAI to avoid wasting API cost.
-    await checkDailyLimit(user.id);
+    // currentCost===0 + free plan → deliver a partial "preview" site to stay within $0.10.
+    const { currentCost, isPaidActive } = await checkDailyLimit(user.id);
+    const freePreview = !isPaidActive && currentCost === 0;
 
     const ref = getStyleReference(data.styleReferenceId);
 
@@ -64,6 +66,7 @@ export const createProject = createServerFn({ method: "POST" })
       ...data,
       styleReference: ref ? { name: ref.name, code: ref.codeExcerpt } : undefined,
       integrations,
+      freePreview,
     });
 
     // Record actual cost after successful generation.

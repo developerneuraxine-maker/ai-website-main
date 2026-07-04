@@ -20,9 +20,11 @@ dist-ssr
 .env
 .env.local
 
-# Wrangler / Cloudflare
-.wrangler/
-.dev.vars
+# Vercel build output
+.vercel/
+
+# Bun (not used — project uses npm)
+bun.lock
 
 # Editor directories and files
 .vscode/*

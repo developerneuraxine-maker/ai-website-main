@@ -374,8 +374,8 @@ function NewProject() {
   const matchedTemplate = templates.find((t) => t.id === templateId);
   const navigate = useNavigate();
 
-  // Pro users get unlimited images; free users are capped at 5
-  const maxImages = plan?.is_paid_active ? 50 : 5;
+  // Owners and pro users get unlimited images; free users are capped at 5
+  const maxImages = plan?.is_owner || plan?.is_paid_active ? 50 : 5;
 
   // Core state
   const [prompt, setPrompt] = useState(

@@ -98,8 +98,8 @@ function AppLayout() {
               </kbd>
             </div>
             <div className="ml-auto flex items-center gap-2">
-              {/* Small usage chip when near limit */}
-              {plan && plan.usage_pct >= 50 && (
+              {/* Small usage chip when near limit — hidden for owner accounts */}
+              {plan && !plan.is_owner && plan.usage_pct >= 50 && (
                 <Link
                   to="/plans"
                   className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs sm:inline-flex ${

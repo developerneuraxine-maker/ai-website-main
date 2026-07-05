@@ -833,6 +833,7 @@ export type UserPlan = {
   usage_pct: number; // 0–100
   limit_reached: boolean;
   is_paid_active: boolean;
+  is_owner?: boolean; // true → hide all plan UI; no limits apply
 };
 
 // Returns "YYYY-MM" — used to detect a new month and reset usage

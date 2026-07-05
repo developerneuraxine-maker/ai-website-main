@@ -92,9 +92,33 @@ function UsageBar({ plan }: { plan: UserPlan }) {
   );
 }
 
+function OwnerPanel() {
+  return (
+    <div className="mx-auto max-w-5xl px-6 py-10">
+      <div>
+        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Billing</div>
+        <h1 className="font-display text-3xl">Plans & usage</h1>
+      </div>
+      <div className="panel mt-8 p-6">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">⚡</span>
+          <div>
+            <div className="font-display text-xl">Owner account</div>
+            <div className="mt-0.5 text-sm text-muted-foreground">
+              This account has unlimited access to all features — no plan limits, no usage cap.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Plans() {
   const initial = Route.useLoaderData();
   const [plan, setPlan] = useState<UserPlan>(initial);
+
+  if (plan.is_owner) return <OwnerPanel />;
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [paySuccess, setPaySuccess] = useState(false);

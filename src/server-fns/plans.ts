@@ -10,7 +10,8 @@ export const fetchMyPlan = createServerFn({ method: "GET" }).handler(async () =>
   const user = await requireUser();
   const plan = await getUserPlan(user.id);
   if (isOwner(user.email)) {
-    return { ...plan, limit_reached: false, usage_pct: 0, daily_cost_usd: 0, daily_limit_usd: 999, is_paid_active: true, plan_type: "paid" as const };
+    // Owners are completely outside the plan system — no limits, no usage shown.
+    return { ...plan, is_owner: true, limit_reached: false, usage_pct: 0, daily_cost_usd: 0, daily_limit_usd: 999 };
   }
   return plan;
 });

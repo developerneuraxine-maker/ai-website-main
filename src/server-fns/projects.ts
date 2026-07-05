@@ -3,6 +3,7 @@ import { generateSite, reviseSite } from "@/lib/openai";
 import { getStyleReference } from "@/lib/style-references";
 import { requireUser } from "@/lib/auth-server";
 import { generateUserToken } from "@/lib/integrate";
+import { isOwner } from "@/lib/owner";
 import {
   addProjectMessage,
   checkDailyLimit,
@@ -19,10 +20,6 @@ import {
   reviseProjectRecord,
   softDeleteProject,
 } from "@/lib/db";
-
-// Owner accounts — bypass usage limits and always get full generation.
-const OWNER_EMAILS = ["socialsprouts1@gmail.com", "developerneuraxine@gmail.com"];
-const OWNER_EMAILS_LOWER = OWNER_EMAILS.map((e) => e.toLowerCase());
 
 export const createProject = createServerFn({ method: "POST" })
   .validator(
@@ -45,11 +42,10 @@ export const createProject = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireUser();
 
-    const userEmail = (user.email || "").toLowerCase();
-    const isOwner = OWNER_EMAILS_LOWER.includes(userEmail);
+    const ownerAccount = isOwner(user.email);
     let freePreview = false;
 
-    if (!isOwner) {
+    if (!ownerAccount) {
       // Check daily limit BEFORE calling OpenAI to avoid wasting API cost.
       // currentCost===0 + free plan → deliver a partial "preview" site to stay within $0.10.
       const { currentCost, isPaidActive } = await checkDailyLimit(user.id);
@@ -124,7 +120,7 @@ export const reviseProject = createServerFn({ method: "POST" })
     }
 
     // Check daily limit BEFORE calling OpenAI (owner is exempt).
-    if (!OWNER_EMAILS_LOWER.includes((user.email || "").toLowerCase())) await checkDailyLimit(user.id);
+    if (!isOwner(user.email)) await checkDailyLimit(user.id);
 
     await addProjectMessage(data.id, "you", data.instruction);
     const { html, costUsd } = await reviseSite({

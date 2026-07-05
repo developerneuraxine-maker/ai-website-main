@@ -16,6 +16,7 @@ import {
   adminListAnnouncements,
   adminDeleteAnnouncement,
   getActiveAnnouncements,
+  adminGetEmailLogs,
 } from "@/lib/db";
 
 export const fetchAdminStats = createServerFn({ method: "GET" }).handler(async () => {
@@ -125,3 +126,35 @@ export const deleteBroadcast = createServerFn({ method: "POST" })
     await adminDeleteAnnouncement(data.id);
     return { ok: true };
   });
+
+export const fetchEmailLogs = createServerFn({ method: "GET" }).handler(async () => {
+  await requireAdmin();
+  return adminGetEmailLogs(200);
+});
+
+// Manual trigger — useful for testing without waiting for cron
+export const triggerReminderEmails = createServerFn({ method: "POST" }).handler(async () => {
+  await requireAdmin();
+  const { getUsersNeedingRenewalReminder, getUsersNeedingFreeUpgradeEmail, markRenewalReminderSent, markFreeReminderSent, logEmail } = await import("@/lib/db");
+  const { sendReminderEmail } = await import("@/lib/email");
+
+  const results = { proReminders: 0, freeReminders: 0, errors: 0 };
+
+  const proUsers = await getUsersNeedingRenewalReminder();
+  for (const user of proUsers) {
+    const { ok, subject, error } = await sendReminderEmail(user.email, "pro_expiring");
+    await logEmail(user.id, user.email, "pro_expiring", subject, ok ? "sent" : "failed", error);
+    if (ok) { await markRenewalReminderSent(user.id); results.proReminders++; }
+    else results.errors++;
+  }
+
+  const freeUsers = await getUsersNeedingFreeUpgradeEmail();
+  for (const user of freeUsers) {
+    const { ok, subject, error } = await sendReminderEmail(user.email, "free_limit_reached");
+    await logEmail(user.id, user.email, "free_limit_reached", subject, ok ? "sent" : "failed", error);
+    if (ok) { await markFreeReminderSent(user.id); results.freeReminders++; }
+    else results.errors++;
+  }
+
+  return results;
+});

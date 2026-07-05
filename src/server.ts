@@ -3,6 +3,14 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleIntegrationRequest, CORS_HEADERS as INTEGRATION_CORS } from "./lib/integrate";
+import {
+  getUsersNeedingRenewalReminder,
+  getUsersNeedingFreeUpgradeEmail,
+  markRenewalReminderSent,
+  markFreeReminderSent,
+  logEmail,
+} from "./lib/db";
+import { sendReminderEmail } from "./lib/email";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -57,10 +65,72 @@ function applySecurityHeaders(response: Response): Response {
   return new Response(response.body, { status: response.status, headers });
 }
 
+async function handleCronRenewalReminder(request: Request): Promise<Response> {
+  // Verify Vercel Cron secret so random people can't trigger this
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const auth = request.headers.get("authorization") ?? "";
+    if (auth !== `Bearer ${cronSecret}`) {
+      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }
+
+  const results = { proReminders: 0, freeReminders: 0, errors: 0 };
+
+  try {
+    // Pro users expiring in 2 days
+    const proUsers = await getUsersNeedingRenewalReminder();
+    for (const user of proUsers) {
+      const { ok, subject, error } = await sendReminderEmail(user.email, "pro_expiring");
+      await logEmail(user.id, user.email, "pro_expiring", subject, ok ? "sent" : "failed", error);
+      if (ok) {
+        await markRenewalReminderSent(user.id);
+        results.proReminders++;
+      } else {
+        results.errors++;
+      }
+    }
+
+    // Free users who hit their limit
+    const freeUsers = await getUsersNeedingFreeUpgradeEmail();
+    for (const user of freeUsers) {
+      const { ok, subject, error } = await sendReminderEmail(user.email, "free_limit_reached");
+      await logEmail(user.id, user.email, "free_limit_reached", subject, ok ? "sent" : "failed", error);
+      if (ok) {
+        await markFreeReminderSent(user.id);
+        results.freeReminders++;
+      } else {
+        results.errors++;
+      }
+    }
+  } catch (err) {
+    console.error("[cron] renewal-reminder error:", err);
+    return new Response(JSON.stringify({ ok: false, error: String(err), results }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  console.log("[cron] renewal-reminder done:", results);
+  return new Response(JSON.stringify({ ok: true, ...results }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
-    // Integration API — public CORS endpoints for generated websites
     const url = new URL(request.url);
+
+    // Cron — daily renewal reminder emails
+    if (url.pathname === "/api/cron/renewal-reminder") {
+      return handleCronRenewalReminder(request);
+    }
+
+    // Integration API — public CORS endpoints for generated websites
     if (url.pathname.startsWith("/api/integrate/")) {
       try {
         return await handleIntegrationRequest(url.pathname, request);

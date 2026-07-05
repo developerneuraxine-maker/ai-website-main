@@ -34,15 +34,31 @@ export function Panel({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div className={cn("panel p-6", className)} {...props} />;
 }
 
-export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+export function Stat({
+  label,
+  value,
+  hint,
+  icon,
+  delta,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  icon?: ReactNode;
+  delta?: string;
+}) {
   return (
-    <Panel className="flex flex-col gap-2">
-      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        {label}
+    <div className={cn("stat-card") as string}>
+      {icon ? <div className="stat-card-icon">{icon}</div> : null}
+      <div className="flex flex-col">
+        <div className="stat-card-label">{label}</div>
+        <div className="flex items-center gap-3">
+          <div className="stat-card-value">{value}</div>
+          {delta && <div className="stat-card-delta">{delta}</div>}
+        </div>
+        {hint && <div className="text-xs text-muted-foreground mt-1">{hint}</div>}
       </div>
-      <div className="font-display text-3xl">{value}</div>
-      {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
-    </Panel>
+    </div>
   );
 }
 

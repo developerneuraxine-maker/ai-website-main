@@ -52,6 +52,11 @@
 :root {
   --radius: 0.75rem;
 
+  /* Motion tokens */
+  --motion-duration-short: 160ms;
+  --motion-duration-medium: 220ms;
+  --motion-ease: cubic-bezier(.2,.8,.2,1);
+
   /* Dark-first command-center palette */
   --background: oklch(0.16 0.012 95);
   --foreground: oklch(0.95 0.018 90);
@@ -175,4 +180,151 @@
   border-radius: var(--radius-2xl);
   background: color-mix(in oklab, var(--surface) 85%, transparent);
   backdrop-filter: blur(12px);
+}
+
+@utility stat-card {
+  @apply panel p-4; /* use existing panel style */
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border-radius: var(--radius-xl);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  will-change: transform;
+}
+
+.stat-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-glow);
+  border-color: color-mix(in oklab, var(--primary) 50%, var(--border));
+}
+
+.stat-card-icon {
+  min-width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--primary) 12%, transparent), color-mix(in oklab, var(--accent) 6%, transparent));
+  box-shadow: 0 6px 18px -8px color-mix(in oklab, var(--primary) 40%, transparent);
+}
+
+.stat-card-value {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.stat-card-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted-foreground);
+}
+
+.stat-card-delta {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+/* Card styles for project tiles */
+.card-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in oklab, var(--surface) 95%, transparent), transparent);
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+.card-panel:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-elevated), var(--shadow-glow);
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+}
+.card-thumbnail {
+  position: relative;
+  aspect-ratio: 16/9;
+  background-size: cover;
+  background-position: center;
+}
+.card-thumbnail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.28));
+}
+.card-title-overlay {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  color: var(--color-foreground);
+  mix-blend-mode: overlay;
+}
+
+/* Collapsed sidebar compact styling */
+[data-state="collapsed"] [data-sidebar="menu-button"] {
+  justify-content: center;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+[data-state="collapsed"] [data-sidebar="menu-button"] > span:last-child {
+  display: none;
+}
+
+[data-state="collapsed"] [data-sidebar="menu-badge"] {
+  display: none;
+}
+
+[data-state="collapsed"] [data-sidebar="group-label"] {
+  opacity: 0;
+  height: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+/* Increase tooltip visibility when collapsed */
+.radix-tooltip-content[data-state="delayed-open"] {
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+}
+
+/* Focus ring improvements for collapsed items */
+[data-state="collapsed"] [data-sidebar="menu-button"]:focus-visible {
+  outline: 2px solid var(--sidebar-ring);
+  outline-offset: 2px;
+}
+
+/* Button and interactive micro-interactions */
+button,
+.btn {
+  transition: transform var(--motion-duration-short) var(--motion-ease),
+    box-shadow var(--motion-duration-short) var(--motion-ease),
+    background-color var(--motion-duration-short) var(--motion-ease),
+    color var(--motion-duration-short) var(--motion-ease);
+  will-change: transform, box-shadow;
+}
+
+button:active,
+.btn:active {
+  transform: translateY(1px) scale(0.998);
+}
+
+button:focus-visible,
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 5px color-mix(in oklab, var(--ring) 18%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+}
+
+/* Respect reduced motion for users who disable animations */
+@media (prefers-reduced-motion: reduce) {
+  .stat-card,
+  .card-panel,
+  button,
+  .btn,
+  .stat-card-icon {
+    transition: none !important;
+    transform: none !important;
+    animation: none !important;
+  }
 }

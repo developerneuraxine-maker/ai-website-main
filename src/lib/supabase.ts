@@ -19,6 +19,8 @@ export type Database = {
           daily_reset_date: string;
           suspended_at: string | null;
           suspended_reason: string | null;
+          renewal_reminder_sent_at: string | null;
+          free_limit_reminder_sent_at: string | null;
         },
         {
           id: string;
@@ -31,6 +33,28 @@ export type Database = {
           daily_reset_date?: string;
           suspended_at?: string | null;
           suspended_reason?: string | null;
+          renewal_reminder_sent_at?: string | null;
+          free_limit_reminder_sent_at?: string | null;
+        }
+      >;
+      email_logs: Table<
+        {
+          id: string;
+          user_id: string | null;
+          email: string;
+          type: string;
+          subject: string;
+          status: string;
+          error: string | null;
+          sent_at: string;
+        },
+        {
+          user_id?: string | null;
+          email: string;
+          type: string;
+          subject: string;
+          status?: string;
+          error?: string | null;
         }
       >;
       announcements: Table<

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, ArrowUpRight, Plus, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Plus, Sparkles, Folder, Cloud, Eye } from "lucide-react";
 import { PageHeader, Panel, Stat, Chip } from "@/components/ui-bits";
 import { examplePrompts } from "@/lib/mock-data";
 import { fetchProjects } from "@/server-fns/projects";
@@ -59,6 +59,27 @@ function Dashboard() {
   ];
   const maxCount = Math.max(1, ...statusEntries.map((s) => stats.statusCounts[s.key]));
 
+  const statCards = [
+    {
+      label: "Projects",
+      value: stats.projects,
+      icon: <Folder className="h-5 w-5" />,
+      hint: "Active projects",
+    },
+    {
+      label: "Deployments",
+      value: stats.deployments,
+      icon: <Cloud className="h-5 w-5" />,
+      hint: "Successful deployments",
+    },
+    {
+      label: "Total visits",
+      value: formatCompact(stats.visits),
+      icon: <Eye className="h-5 w-5" />,
+      hint: "Page impressions this month",
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-10">
       <PageHeader
@@ -76,52 +97,81 @@ function Dashboard() {
       />
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <Stat label="Projects" value={stats.projects} />
-        <Stat label="Deployments" value={stats.deployments} />
-        <Stat label="Total visits" value={formatCompact(stats.visits)} />
+        {statCards.map((stat, index) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05, duration: 0.35 }}
+          >
+            <Stat key={stat.label} {...stat} />
+          </motion.div>
+        ))}
       </div>
 
-      {/* Quick prompt */}
-      <Panel className="mt-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              Quick start
+      <div className="mt-10 grid gap-4 xl:grid-cols-[1.3fr_0.9fr]">
+        <Panel className="relative overflow-hidden pb-6">
+          <div className="absolute inset-x-0 top-0 h-24 bg-linear-to-b from-primary/10 to-transparent" />
+          <div className="relative">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Quick start
+                </div>
+                <div className="font-display text-2xl">Start a new website</div>
+              </div>
+              <Chip tone="primary">
+                <Sparkles className="h-3 w-3" /> AI ready
+              </Chip>
             </div>
-            <div className="font-display text-2xl">Start a new website</div>
+            <div className="mt-5 flex items-center gap-3 rounded-3xl border border-border bg-elevated p-3 focus-within:border-primary/70 focus-within:ring-2 focus-within:ring-primary/10">
+              <span className="ml-2 text-muted-foreground">›</span>
+              <input
+                value={quickPrompt}
+                onChange={(e) => setQuickPrompt(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && goGenerate()}
+                className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                placeholder="A boutique hotel in the Dolomites with a booking widget…"
+              />
+              <button
+                onClick={goGenerate}
+                className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+              >
+                Generate <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {examplePrompts.slice(0, 4).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setQuickPrompt(p)}
+                  className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
           </div>
-          <Chip tone="primary">
-            <Sparkles className="h-3 w-3" /> AI ready
-          </Chip>
-        </div>
-        <div className="mt-5 flex items-center gap-3 rounded-xl border border-border bg-elevated p-2">
-          <span className="ml-2 text-muted-foreground">›</span>
-          <input
-            value={quickPrompt}
-            onChange={(e) => setQuickPrompt(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && goGenerate()}
-            className="h-10 flex-1 bg-transparent text-sm outline-none"
-            placeholder="A boutique hotel in the Dolomites with a booking widget…"
-          />
-          <button
-            onClick={goGenerate}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            Generate <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {examplePrompts.slice(0, 4).map((p) => (
-            <button
-              key={p}
-              onClick={() => setQuickPrompt(p)}
-              className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground"
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      </Panel>
+        </Panel>
+
+        <Panel className="hidden xl:block">
+          <div className="font-display text-xl">Why Lumen?</div>
+          <div className="mt-5 space-y-4 text-sm text-muted-foreground">
+            <p>Launch polished website projects faster with AI-powered creative templates and deployment-ready builds.</p>
+            <p>Track project health, invite collaborators, and keep the whole workspace in a single view.</p>
+          </div>
+          <div className="mt-6 grid gap-3">
+            <div className="rounded-3xl border border-border bg-surface/80 p-4">
+              <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Speed</div>
+              <div className="mt-2 font-medium">From prompt to preview in seconds.</div>
+            </div>
+            <div className="rounded-3xl border border-border bg-surface/80 p-4">
+              <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Control</div>
+              <div className="mt-2 font-medium">Manage every project from one dashboard.</div>
+            </div>
+          </div>
+        </Panel>
+      </div>
 
       {/* Recent projects */}
       <div className="mt-12 flex items-end justify-between">
@@ -154,20 +204,16 @@ function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.04 }}
           >
-            <Link
-              to="/projects/$id"
-              params={{ id: p.id }}
-              className="panel group block overflow-hidden p-0 transition hover:border-primary/40"
-            >
+            <Link to="/projects/$id" params={{ id: p.id }} className="card-panel group block p-0">
               <div
-                className={`relative aspect-[16/9] overflow-hidden bg-gradient-to-br ${p.thumbnail}`}
+                className={`card-thumbnail ${p.thumbnail}`}
+                aria-hidden
+                style={{ backgroundImage: `linear-gradient(135deg, rgba(255,255,255,0.02), transparent), var(--thumbnail, none)` }}
               >
-                <div className="absolute inset-0 grid place-items-center">
-                  <div className="font-display text-4xl text-foreground/90">{p.name}</div>
-                </div>
                 <div className="absolute right-3 top-3">
                   <StatusChip status={p.status} />
                 </div>
+                <div className="card-title-overlay font-display text-2xl font-semibold">{p.name}</div>
               </div>
               <div className="flex items-center justify-between p-5">
                 <div>

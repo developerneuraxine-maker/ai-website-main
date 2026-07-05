@@ -1079,3 +1079,99 @@ export async function getActiveAnnouncements(): Promise<Announcement[]> {
   if (error) return [];
   return (data ?? []) as Announcement[];
 }
+
+// ---- Email reminders ----
+
+export type EmailLogRow = {
+  id: string;
+  user_id: string | null;
+  email: string;
+  type: string;
+  subject: string;
+  status: string;
+  error: string | null;
+  sent_at: string;
+};
+
+// Users whose Pro plan expires in the next 48 hours and haven't been reminded yet (or reminder was sent >7 days ago)
+export async function getUsersNeedingRenewalReminder(): Promise<{ id: string; email: string }[]> {
+  const supabase = getSupabase();
+  const now = new Date();
+  const in2Days = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("id,email")
+    .eq("plan_type", "paid")
+    .not("plan_expires_at", "is", null)
+    .lte("plan_expires_at", in2Days)
+    .gte("plan_expires_at", now.toISOString())
+    .or(`renewal_reminder_sent_at.is.null,renewal_reminder_sent_at.lt.${sevenDaysAgo}`);
+
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ id: r.id, email: r.email ?? "" })).filter((r) => r.email);
+}
+
+// Free users who have hit their limit and haven't been emailed yet this month
+export async function getUsersNeedingFreeUpgradeEmail(): Promise<{ id: string; email: string }[]> {
+  const supabase = getSupabase();
+  const now = new Date();
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const { data: profiles, error } = await supabase
+    .from("user_profiles")
+    .select("id,email,daily_cost_usd,free_limit_reminder_sent_at")
+    .eq("plan_type", "free")
+    .gte("daily_cost_usd", PLAN_MONTHLY_LIMIT_USD.free)
+    .or(`free_limit_reminder_sent_at.is.null,free_limit_reminder_sent_at.lt.${thisMonthStart}`);
+
+  if (error) throw error;
+  return (profiles ?? []).map((r) => ({ id: r.id, email: r.email ?? "" })).filter((r) => r.email);
+}
+
+export async function markRenewalReminderSent(userId: string): Promise<void> {
+  const supabase = getSupabase();
+  await supabase
+    .from("user_profiles")
+    .update({ renewal_reminder_sent_at: new Date().toISOString() })
+    .eq("id", userId);
+}
+
+export async function markFreeReminderSent(userId: string): Promise<void> {
+  const supabase = getSupabase();
+  await supabase
+    .from("user_profiles")
+    .update({ free_limit_reminder_sent_at: new Date().toISOString() })
+    .eq("id", userId);
+}
+
+export async function logEmail(
+  userId: string | null,
+  email: string,
+  type: string,
+  subject: string,
+  status: "sent" | "failed",
+  error?: string,
+): Promise<void> {
+  const supabase = getSupabase();
+  await supabase.from("email_logs").insert({
+    user_id: userId,
+    email,
+    type,
+    subject,
+    status,
+    error: error ?? null,
+  });
+}
+
+export async function adminGetEmailLogs(limit = 100): Promise<EmailLogRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("email_logs")
+    .select()
+    .order("sent_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as EmailLogRow[];
+}

@@ -19,7 +19,9 @@ import { Route as AuthConnectorCallbackRouteImport } from './routes/auth_.connec
 import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminProjectsRouteImport } from './routes/admin.projects'
+import { Route as AdminEmailsRouteImport } from './routes/admin.emails'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
+import { Route as AdminAnnouncementsRouteImport } from './routes/admin.announcements'
 import { Route as AppWorkspaceRouteImport } from './routes/_app.workspace'
 import { Route as AppTrashRouteImport } from './routes/_app.trash'
 import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
@@ -84,9 +86,19 @@ const AdminProjectsRoute = AdminProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminEmailsRoute = AdminEmailsRouteImport.update({
+  id: '/emails',
+  path: '/emails',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAnnouncementsRoute = AdminAnnouncementsRouteImport.update({
+  id: '/announcements',
+  path: '/announcements',
   getParentRoute: () => AdminRoute,
 } as any)
 const AppWorkspaceRoute = AppWorkspaceRouteImport.update({
@@ -178,7 +190,9 @@ export interface FileRoutesByFullPath {
   '/templates': typeof AppTemplatesRoute
   '/trash': typeof AppTrashRoute
   '/workspace': typeof AppWorkspaceRoute
+  '/admin/announcements': typeof AdminAnnouncementsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/emails': typeof AdminEmailsRoute
   '/admin/projects': typeof AdminProjectsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -204,7 +218,9 @@ export interface FileRoutesByTo {
   '/templates': typeof AppTemplatesRoute
   '/trash': typeof AppTrashRoute
   '/workspace': typeof AppWorkspaceRoute
+  '/admin/announcements': typeof AdminAnnouncementsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/emails': typeof AdminEmailsRoute
   '/admin/projects': typeof AdminProjectsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -232,7 +248,9 @@ export interface FileRoutesById {
   '/_app/templates': typeof AppTemplatesRoute
   '/_app/trash': typeof AppTrashRoute
   '/_app/workspace': typeof AppWorkspaceRoute
+  '/admin/announcements': typeof AdminAnnouncementsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/emails': typeof AdminEmailsRoute
   '/admin/projects': typeof AdminProjectsRoute
   '/admin/users': typeof AdminUsersRoute
   '/auth_/callback': typeof AuthCallbackRoute
@@ -260,7 +278,9 @@ export interface FileRouteTypes {
     | '/templates'
     | '/trash'
     | '/workspace'
+    | '/admin/announcements'
     | '/admin/dashboard'
+    | '/admin/emails'
     | '/admin/projects'
     | '/admin/users'
     | '/auth/callback'
@@ -286,7 +306,9 @@ export interface FileRouteTypes {
     | '/templates'
     | '/trash'
     | '/workspace'
+    | '/admin/announcements'
     | '/admin/dashboard'
+    | '/admin/emails'
     | '/admin/projects'
     | '/admin/users'
     | '/auth/callback'
@@ -313,7 +335,9 @@ export interface FileRouteTypes {
     | '/_app/templates'
     | '/_app/trash'
     | '/_app/workspace'
+    | '/admin/announcements'
     | '/admin/dashboard'
+    | '/admin/emails'
     | '/admin/projects'
     | '/admin/users'
     | '/auth_/callback'
@@ -405,11 +429,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminProjectsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/emails': {
+      id: '/admin/emails'
+      path: '/emails'
+      fullPath: '/admin/emails'
+      preLoaderRoute: typeof AdminEmailsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/dashboard': {
       id: '/admin/dashboard'
       path: '/dashboard'
       fullPath: '/admin/dashboard'
       preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/announcements': {
+      id: '/admin/announcements'
+      path: '/announcements'
+      fullPath: '/admin/announcements'
+      preLoaderRoute: typeof AdminAnnouncementsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/_app/workspace': {
@@ -560,13 +598,17 @@ const AppRouteChildren: AppRouteChildren = {
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface AdminRouteChildren {
+  AdminAnnouncementsRoute: typeof AdminAnnouncementsRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminEmailsRoute: typeof AdminEmailsRoute
   AdminProjectsRoute: typeof AdminProjectsRoute
   AdminUsersRoute: typeof AdminUsersRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAnnouncementsRoute: AdminAnnouncementsRoute,
   AdminDashboardRoute: AdminDashboardRoute,
+  AdminEmailsRoute: AdminEmailsRoute,
   AdminProjectsRoute: AdminProjectsRoute,
   AdminUsersRoute: AdminUsersRoute,
 }

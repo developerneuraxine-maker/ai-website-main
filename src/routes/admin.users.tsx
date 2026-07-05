@@ -5,6 +5,7 @@ import {
   toggleAdminRole,
   suspendUser,
   unsuspendUser,
+  changePlan,
 } from "@/server-fns/admin";
 import {
   ShieldCheck,
@@ -16,6 +17,8 @@ import {
   Download,
   Search,
   ChevronRight,
+  Zap,
+  ArrowDownToLine,
 } from "lucide-react";
 import type { AdminUserDetail } from "@/lib/db";
 
@@ -37,7 +40,26 @@ function planBadge(plan: "free" | "paid") {
   );
 }
 
-function UserDetailModal({ user, onClose }: { user: AdminUserDetail; onClose: () => void }) {
+function UserDetailModal({
+  user,
+  onClose,
+  onPlanChange,
+}: {
+  user: AdminUserDetail;
+  onClose: () => void;
+  onPlanChange: (userId: string, plan: "free" | "paid") => Promise<void>;
+}) {
+  const [planWorking, setPlanWorking] = useState(false);
+
+  const handlePlanChange = async (newPlan: "free" | "paid") => {
+    setPlanWorking(true);
+    try {
+      await onPlanChange(user.id, newPlan);
+    } finally {
+      setPlanWorking(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
@@ -137,6 +159,34 @@ function UserDetailModal({ user, onClose }: { user: AdminUserDetail; onClose: ()
               </div>
             </div>
           )}
+
+          {/* Plan management */}
+          <div className="border-t border-border pt-4">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+              Plan management
+            </div>
+            <div className="flex gap-2">
+              {user.plan_type !== "paid" ? (
+                <button
+                  onClick={() => void handlePlanChange("paid")}
+                  disabled={planWorking}
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-500 hover:bg-emerald-500/20 disabled:opacity-50 transition"
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  {planWorking ? "Upgrading…" : "Upgrade to Pro (30 days)"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => void handlePlanChange("free")}
+                  disabled={planWorking}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition"
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  {planWorking ? "Downgrading…" : "Downgrade to Free"}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -252,6 +302,20 @@ function AdminUsers() {
     }
   };
 
+  const doPlanChange = async (userId: string, plan: "free" | "paid") => {
+    try {
+      await changePlan({ data: { userId, planType: plan } });
+      setUsers((prev) =>
+        prev.map((x) => (x.id === userId ? { ...x, plan_type: plan } : x)),
+      );
+      if (detailUser?.id === userId) {
+        setDetailUser((prev) => prev ? { ...prev, plan_type: plan } : prev);
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed.");
+    }
+  };
+
   const doUnsuspend = async (u: AdminUserDetail) => {
     setWorking(u.id + ":suspend");
     try {
@@ -295,7 +359,7 @@ function AdminUsers() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       {detailUser && (
-        <UserDetailModal user={detailUser} onClose={() => setDetailUser(null)} />
+        <UserDetailModal user={detailUser} onClose={() => setDetailUser(null)} onPlanChange={doPlanChange} />
       )}
       {suspendTarget && (
         <SuspendModal

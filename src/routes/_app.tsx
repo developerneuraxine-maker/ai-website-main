@@ -9,38 +9,101 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Search, Plus, LogOut } from "lucide-react";
+import { Search, Plus, LogOut, Info, AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { fetchCurrentUser } from "@/server-fns/auth";
 import { fetchMyPlan } from "@/server-fns/plans";
+import { fetchActiveAnnouncements } from "@/server-fns/admin";
 import { getAuthClient } from "@/lib/auth-client";
 import type { ServerUser } from "@/lib/auth-server";
-import type { UserPlan } from "@/lib/db";
+import type { UserPlan, Announcement } from "@/lib/db";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async () => {
     const user = await fetchCurrentUser();
     if (!user) throw redirect({ to: "/auth" });
-    // Store email for Razorpay prefill (client-accessible)
     if (typeof window !== "undefined") {
       sessionStorage.setItem("lumen_user_email", user.email);
     }
     return { user } as { user: ServerUser };
   },
-  // Load plan data for sidebar usage bar
   loader: async () => {
     try {
-      const plan = await fetchMyPlan();
-      return { plan };
+      const [plan, announcements] = await Promise.all([
+        fetchMyPlan(),
+        fetchActiveAnnouncements().catch(() => [] as Announcement[]),
+      ]);
+      return { plan, announcements };
     } catch {
-      return { plan: undefined };
+      return { plan: undefined, announcements: [] as Announcement[] };
     }
   },
   component: AppLayout,
 });
 
+const ANNOUNCEMENT_ICONS = {
+  info: Info,
+  warning: AlertTriangle,
+  success: CheckCircle2,
+};
+
+const ANNOUNCEMENT_STYLES = {
+  info: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  warning: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+};
+
+function AnnouncementBanner({ announcements }: { announcements: Announcement[] }) {
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try {
+      const stored = sessionStorage.getItem("lumen_dismissed_announcements");
+      return new Set(stored ? (JSON.parse(stored) as string[]) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  const dismiss = (id: string) => {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        sessionStorage.setItem("lumen_dismissed_announcements", JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  };
+
+  const visible = announcements.filter((a) => !dismissed.has(a.id));
+  if (visible.length === 0) return null;
+
+  // Show only the most recent one at a time
+  const a = visible[0];
+  const type = (a.type ?? "info") as "info" | "warning" | "success";
+  const Icon = ANNOUNCEMENT_ICONS[type];
+  const style = ANNOUNCEMENT_STYLES[type];
+
+  return (
+    <div className={`flex items-start gap-3 border-b px-4 py-2.5 text-sm ${style}`}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <span className="flex-1">{a.message}</span>
+      {visible.length > 1 && (
+        <span className="shrink-0 rounded-full bg-current/10 px-2 py-0.5 font-mono text-[10px]">
+          1 of {visible.length}
+        </span>
+      )}
+      <button onClick={() => dismiss(a.id)} className="shrink-0 opacity-60 hover:opacity-100">
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 function AppLayout() {
   const { user } = useRouteContext({ from: "/_app" }) as { user: ServerUser };
-  const { plan } = Route.useLoaderData() as { plan: UserPlan | undefined };
+  const { plan, announcements } = Route.useLoaderData() as {
+    plan: UserPlan | undefined;
+    announcements: Announcement[];
+  };
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -72,6 +135,10 @@ function AppLayout() {
       <div className="relative z-10 flex min-h-screen w-full">
         <AppSidebar isAdmin={user.isAdmin} plan={plan} />
         <div className="flex min-w-0 flex-1 flex-col">
+          {/* Announcement banner — shown below header, above content */}
+          {announcements.length > 0 && (
+            <AnnouncementBanner announcements={announcements} />
+          )}
           <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border/60 bg-background/70 px-4 backdrop-blur-xl">
             <SidebarTrigger className="-ml-1" />
             <div className="hidden h-7 w-px bg-border md:block" />
@@ -121,7 +188,7 @@ function AppLayout() {
                 <Link
                   to="/profile"
                   title={user.email}
-                  className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-amber-400 to-rose-500 font-mono text-[11px] font-bold text-white"
+                  className="grid h-8 w-8 place-items-center rounded-full bg-linear-to-br from-amber-400 to-rose-500 font-mono text-[11px] font-bold text-white"
                 >
                   {initials}
                 </Link>

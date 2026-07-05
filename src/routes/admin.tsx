@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, redirect } from "@tanstack/react-router";
 import { fetchCurrentUser } from "@/server-fns/auth";
-import { Users, FolderKanban, LayoutDashboard, ShieldCheck, IndianRupee } from "lucide-react";
+import { Users, FolderKanban, LayoutDashboard, ShieldCheck, Megaphone } from "lucide-react";
 import { useRouterState } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin")({
@@ -17,6 +17,7 @@ const links = [
   { title: "Overview", url: "/admin/dashboard", icon: LayoutDashboard },
   { title: "Users", url: "/admin/users", icon: Users },
   { title: "All Projects", url: "/admin/projects", icon: FolderKanban },
+  { title: "Announcements", url: "/admin/announcements", icon: Megaphone },
 ];
 
 function AdminLayout() {

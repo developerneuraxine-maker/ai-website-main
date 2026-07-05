@@ -964,3 +964,118 @@ export async function upgradeToPaid(userId: string, razorpayOrderId: string): Pr
     .eq("id", userId);
   if (error) throw error;
 }
+
+// Admin: manually set a user's plan (upgrade or downgrade)
+export async function adminSetPlan(userId: string, planType: "free" | "paid"): Promise<void> {
+  const supabase = getSupabase();
+  const expiresAt =
+    planType === "paid"
+      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ plan_type: planType, plan_expires_at: expiresAt })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+// Admin: hard-delete any project
+export async function adminDeleteProject(projectId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.from("projects").delete().eq("id", projectId);
+  if (error) throw error;
+}
+
+// Admin: top API spenders (sorted by daily_cost_usd desc)
+export type TopSpender = {
+  id: string;
+  email: string;
+  plan_type: "free" | "paid";
+  daily_cost_usd: number;
+  project_count: number;
+};
+
+export async function adminGetTopSpenders(limit = 10): Promise<TopSpender[]> {
+  const supabase = getSupabase();
+  const { data: profiles, error } = await supabase
+    .from("user_profiles")
+    .select("id,email,plan_type,daily_cost_usd")
+    .order("daily_cost_usd", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  const ids = (profiles ?? []).map((p) => p.id);
+  const { data: projectCounts } = await supabase
+    .from("projects")
+    .select("user_id")
+    .in("user_id", ids)
+    .is("deleted_at", null);
+  const countMap = new Map<string, number>();
+  for (const row of projectCounts ?? []) {
+    countMap.set(row.user_id!, (countMap.get(row.user_id!) ?? 0) + 1);
+  }
+
+  return (profiles ?? []).map((p) => ({
+    id: p.id,
+    email: p.email ?? "",
+    plan_type: (p.plan_type ?? "free") as "free" | "paid",
+    daily_cost_usd: p.daily_cost_usd ?? 0,
+    project_count: countMap.get(p.id) ?? 0,
+  }));
+}
+
+// ---- Announcements ----
+// Requires migration: supabase/migrations/0003_announcements.sql
+
+export type Announcement = {
+  id: string;
+  message: string;
+  type: "info" | "warning" | "success";
+  created_at: string;
+  expires_at: string | null;
+  created_by: string | null;
+};
+
+export async function adminCreateAnnouncement(
+  message: string,
+  type: "info" | "warning" | "success",
+  expiresAt: string | null,
+  createdBy: string,
+): Promise<Announcement> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("announcements")
+    .insert({ message, type, expires_at: expiresAt, created_by: createdBy })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Announcement;
+}
+
+export async function adminListAnnouncements(): Promise<Announcement[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("announcements")
+    .select()
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Announcement[];
+}
+
+export async function adminDeleteAnnouncement(id: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.from("announcements").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function getActiveAnnouncements(): Promise<Announcement[]> {
+  const supabase = getSupabase();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("announcements")
+    .select()
+    .or(`expires_at.is.null,expires_at.gt.${now}`)
+    .order("created_at", { ascending: false });
+  if (error) return [];
+  return (data ?? []) as Announcement[];
+}

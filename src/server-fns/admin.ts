@@ -9,6 +9,13 @@ import {
   adminUnsuspendUser,
   adminGetRevenueStats,
   adminListUsersDetailed,
+  adminSetPlan,
+  adminDeleteProject,
+  adminGetTopSpenders,
+  adminCreateAnnouncement,
+  adminListAnnouncements,
+  adminDeleteAnnouncement,
+  getActiveAnnouncements,
 } from "@/lib/db";
 
 export const fetchAdminStats = createServerFn({ method: "GET" }).handler(async () => {
@@ -66,5 +73,55 @@ export const unsuspendUser = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin();
     await adminUnsuspendUser(data.userId);
+    return { ok: true };
+  });
+
+export const changePlan = createServerFn({ method: "POST" })
+  .validator((d: { userId: string; planType: "free" | "paid" }) => d)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    await adminSetPlan(data.userId, data.planType);
+    return { ok: true };
+  });
+
+export const deleteProject = createServerFn({ method: "POST" })
+  .validator((d: { projectId: string }) => d)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    await adminDeleteProject(data.projectId);
+    return { ok: true };
+  });
+
+export const fetchTopSpenders = createServerFn({ method: "GET" }).handler(async () => {
+  await requireAdmin();
+  return adminGetTopSpenders(10);
+});
+
+export const fetchBroadcasts = createServerFn({ method: "GET" }).handler(async () => {
+  await requireAdmin();
+  return adminListAnnouncements();
+});
+
+export const fetchActiveAnnouncements = createServerFn({ method: "GET" }).handler(async () => {
+  return getActiveAnnouncements();
+});
+
+export const createBroadcast = createServerFn({ method: "POST" })
+  .validator(
+    (d: { message: string; type: "info" | "warning" | "success"; expiresAt: string | null }) => {
+      if (!d.message.trim()) throw new Error("Message is required.");
+      return d;
+    },
+  )
+  .handler(async ({ data }) => {
+    const me = await requireAdmin();
+    return adminCreateAnnouncement(data.message, data.type, data.expiresAt, me.id);
+  });
+
+export const deleteBroadcast = createServerFn({ method: "POST" })
+  .validator((d: { id: string }) => d)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    await adminDeleteAnnouncement(data.id);
     return { ok: true };
   });

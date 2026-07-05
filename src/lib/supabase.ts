@@ -33,6 +33,22 @@ export type Database = {
           suspended_reason?: string | null;
         }
       >;
+      announcements: Table<
+        {
+          id: string;
+          message: string;
+          type: "info" | "warning" | "success";
+          created_at: string;
+          expires_at: string | null;
+          created_by: string | null;
+        },
+        {
+          message: string;
+          type?: "info" | "warning" | "success";
+          expires_at?: string | null;
+          created_by?: string | null;
+        }
+      >;
       connectors: Table<
         {
           id: string;

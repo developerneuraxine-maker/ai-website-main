@@ -1,4 +1,5 @@
 import { getSupabase, type Database } from "./supabase";
+import { isOwner } from "./owner";
 
 export type ProjectRow = {
   id: string;
@@ -1110,7 +1111,9 @@ export async function getUsersNeedingRenewalReminder(): Promise<{ id: string; em
     .or(`renewal_reminder_sent_at.is.null,renewal_reminder_sent_at.lt.${sevenDaysAgo}`);
 
   if (error) throw error;
-  return (data ?? []).map((r) => ({ id: r.id, email: r.email ?? "" })).filter((r) => r.email);
+  return (data ?? [])
+    .map((r) => ({ id: r.id, email: r.email ?? "" }))
+    .filter((r) => r.email && !isOwner(r.email));
 }
 
 // Free users who have hit their limit and haven't been emailed yet this month
@@ -1127,7 +1130,9 @@ export async function getUsersNeedingFreeUpgradeEmail(): Promise<{ id: string; e
     .or(`free_limit_reminder_sent_at.is.null,free_limit_reminder_sent_at.lt.${thisMonthStart}`);
 
   if (error) throw error;
-  return (profiles ?? []).map((r) => ({ id: r.id, email: r.email ?? "" })).filter((r) => r.email);
+  return (profiles ?? [])
+    .map((r) => ({ id: r.id, email: r.email ?? "" }))
+    .filter((r) => r.email && !isOwner(r.email));
 }
 
 export async function markRenewalReminderSent(userId: string): Promise<void> {

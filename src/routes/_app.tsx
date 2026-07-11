@@ -165,17 +165,17 @@ function AppLayout() {
               </kbd>
             </div>
             <div className="ml-auto flex items-center gap-2">
-              {/* Small usage chip when near limit — hidden for owner accounts */}
-              {plan && !plan.is_owner && plan.usage_pct >= 50 && (
+              {/* Credits chip — shows when ≤2 credits left, hidden for owners */}
+              {plan && !plan.is_owner && plan.credits_remaining <= 2 && (
                 <Link
                   to="/plans"
                   className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs sm:inline-flex ${
-                    plan.usage_pct >= 90
-                      ? "border-orange-500/40 bg-orange-500/10 text-orange-500"
-                      : "border-amber-400/40 bg-amber-400/10 text-amber-500"
+                    plan.credits_remaining === 0
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-orange-500/40 bg-orange-500/10 text-orange-500"
                   }`}
                 >
-                  {plan.limit_reached ? "Limit reached" : `Usage: ${plan.usage_pct}%`}
+                  {plan.credits_remaining === 0 ? "No credits left" : `${plan.credits_remaining} credit${plan.credits_remaining === 1 ? "" : "s"} left`}
                 </Link>
               )}
               <Link

@@ -127,9 +127,9 @@ export function AppSidebar({ isAdmin = false, plan }: { isAdmin?: boolean; plan?
                         <span>Plans</span>
                         {plan && !plan.is_owner && (
                           <span
-                            className={`font-mono text-[9px] ${usagePct >= 90 ? "text-orange-500" : "text-muted-foreground"}`}
+                            className={`font-mono text-[9px] ${plan.credits_remaining === 0 ? "text-destructive" : plan.credits_remaining <= 1 ? "text-orange-500" : "text-muted-foreground"}`}
                           >
-                            {usagePct}%
+                            {plan.credits_remaining}/{plan.credits_total}
                           </span>
                         )}
                       </div>
@@ -172,11 +172,13 @@ export function AppSidebar({ isAdmin = false, plan }: { isAdmin?: boolean; plan?
           <div className="mt-6 rounded-3xl border border-border bg-surface p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="font-display text-sm">Usage</div>
-                <div className="text-sm text-muted-foreground">{usagePct}% of quota used</div>
+                <div className="font-display text-sm">Credits</div>
+                <div className="text-sm text-muted-foreground">
+                  {plan.credits_remaining} of {plan.credits_total} left
+                </div>
               </div>
               <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.28em] text-primary">
-                {plan.is_paid_active ? "Paid" : "Free"}
+                {plan.is_paid_active ? "Pro" : "Free"}
               </span>
             </div>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
@@ -187,7 +189,7 @@ export function AppSidebar({ isAdmin = false, plan }: { isAdmin?: boolean; plan?
             </div>
             {plan.limit_reached && !plan.is_paid_active && (
               <div className="mt-3 text-[11px] text-orange-500">
-                Limit reached · resets next month
+                No credits left · resets 1st of next month
               </div>
             )}
           </div>

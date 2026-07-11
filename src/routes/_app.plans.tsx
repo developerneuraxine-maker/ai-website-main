@@ -60,34 +60,23 @@ function usePlanColor(pct: number) {
 
 function UsageBar({ plan }: { plan: UserPlan }) {
   const barColor = usePlanColor(plan.usage_pct);
-  const label =
-    plan.usage_pct >= 100
-      ? "Monthly limit reached — resets 1st of next month"
-      : plan.usage_pct >= 90
-        ? `${plan.usage_pct}% used — almost at this month's limit`
-        : plan.usage_pct >= 50
-          ? `${plan.usage_pct}% of this month's usage`
-          : plan.usage_pct === 0
-            ? "No usage this month"
-            : `${plan.usage_pct}% of this month's usage`;
+  const pct = Math.min(100, (plan.credits_used / plan.credits_total) * 100);
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">This month's AI usage</span>
-        <span
-          className={plan.usage_pct >= 90 ? "font-medium text-orange-500" : "text-muted-foreground"}
-        >
-          {label}
+        <span className="text-muted-foreground">Credits used this month</span>
+        <span className={plan.credits_remaining === 0 ? "font-medium text-destructive" : plan.credits_remaining <= 1 ? "font-medium text-orange-500" : "text-muted-foreground"}>
+          {plan.credits_used} / {plan.credits_total} credits
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div
-          className={`h-full rounded-full transition-all ${barColor}`}
-          style={{ width: `${Math.min(100, plan.usage_pct)}%` }}
-        />
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
       </div>
-      <div className="text-[10px] text-muted-foreground">Resets on the 1st of every month</div>
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+        <span>{plan.credits_remaining} credits remaining</span>
+        <span>Resets 1st of every month</span>
+      </div>
     </div>
   );
 }

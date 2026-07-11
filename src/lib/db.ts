@@ -835,7 +835,14 @@ export type UserPlan = {
   limit_reached: boolean;
   is_paid_active: boolean;
   is_owner?: boolean; // true → hide all plan UI; no limits apply
+  credits_total: number;     // 5 (free) or 100 (pro)
+  credits_used: number;      // generations used this month
+  credits_remaining: number; // credits_total - credits_used
 };
+
+// 1 credit = $0.02. Free = 5 credits ($0.10), Pro = 100 credits ($2.00)
+const CREDIT_COST_USD = 0.02;
+const CREDITS_PER_PLAN = { free: 5, paid: 100 } as const;
 
 // Returns "YYYY-MM" — used to detect a new month and reset usage
 function currentMonthStr() {
@@ -872,6 +879,10 @@ export async function getUserPlan(userId: string): Promise<UserPlan> {
   const rawPct = (monthlyCost / limit) * 100;
   const usagePct = monthlyCost > 0 ? Math.min(100, Math.max(1, Math.ceil(rawPct))) : 0;
 
+  const creditsTotal = CREDITS_PER_PLAN[effectivePlan];
+  const creditsUsed = Math.min(creditsTotal, Math.round(monthlyCost / CREDIT_COST_USD));
+  const creditsRemaining = Math.max(0, creditsTotal - creditsUsed);
+
   return {
     plan_type: effectivePlan,
     plan_expires_at: data.plan_expires_at,
@@ -880,6 +891,9 @@ export async function getUserPlan(userId: string): Promise<UserPlan> {
     usage_pct: usagePct,
     limit_reached: monthlyCost >= limit,
     is_paid_active: isPaidActive,
+    credits_total: creditsTotal,
+    credits_used: creditsUsed,
+    credits_remaining: creditsRemaining,
   };
 }
 
@@ -940,8 +954,9 @@ export async function recordDailyUsage(userId: string, costUsd: number): Promise
   const currentCost =
     (data?.daily_reset_date ?? "").slice(0, 7) < thisMonth ? 0 : (data?.daily_cost_usd ?? 0);
 
-  // Enforce a minimum per-generation cost so the bar always moves visibly
-  const effectiveCost = Math.max(costUsd, 0.001);
+  // Charge exactly 1 credit per generation (= $0.02), regardless of actual API cost
+  const effectiveCost = CREDIT_COST_USD;
+  void costUsd; // actual cost tracked internally, not charged to user quota
 
   const { error: updateError } = await supabase
     .from("user_profiles")

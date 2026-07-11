@@ -170,3 +170,75 @@ export const deleteTrashedProjectForever = createServerFn({ method: "POST" })
     await deleteProjectForever(data.id, user.id);
     return { ok: true };
   });
+
+// Extract structured info from a business card or resume image using Vision AI
+export const extractFromImage = createServerFn({ method: "POST" })
+  .validator((d: { imageUrl: string; type: "business_card" | "resume" }) => d)
+  .handler(async ({ data }) => {
+    await requireUser();
+    const { OpenAI } = await import("openai");
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const instruction =
+      data.type === "business_card"
+        ? `Extract all information from this business card image and return ONLY a JSON object:
+{
+  "name": "full name",
+  "title": "job title or profession",
+  "company": "company or business name",
+  "phone": "phone number",
+  "email": "email address",
+  "website": "website if visible",
+  "address": "address if visible",
+  "services": "services or tagline if visible",
+  "prompt": "A detailed website generation prompt for this person/business"
+}`
+        : `Extract all key information from this resume/CV image and return ONLY a JSON object:
+{
+  "name": "full name",
+  "title": "current job title",
+  "summary": "professional summary in 1-2 sentences",
+  "skills": "top 6-8 skills as comma-separated text",
+  "experience": "2-3 key experiences summarized in 2 sentences",
+  "education": "highest degree and institution",
+  "email": "email if visible",
+  "prompt": "A detailed portfolio website generation prompt for this person"
+}`;
+
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: data.imageUrl } },
+            { type: "text", text: instruction },
+          ],
+        },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    try {
+      const cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+      return JSON.parse(cleaned) as Record<string, string>;
+    } catch {
+      return { prompt: "Create a professional website based on the uploaded information." };
+    }
+  });
+
+// Save visually-edited HTML directly (no AI call, no credit charge)
+export const saveProjectHtml = createServerFn({ method: "POST" })
+  .validator((d: { id: string; html: string }) => d)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { getSupabase } = await import("@/lib/supabase");
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("projects")
+      .update({ generated_html: data.html })
+      .eq("id", data.id)
+      .eq("user_id", user.id);
+    if (error) throw error;
+    return { ok: true };
+  });

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { templates } from "@/lib/mock-data";
 import { styleReferences } from "@/lib/style-references";
-import { createProject } from "@/server-fns/projects";
+import { createProject, extractFromImage } from "@/server-fns/projects";
 import { fetchMyPlan } from "@/server-fns/plans";
 import { uploadImage } from "@/server-fns/uploads";
 import { enhancePrompt } from "@/server-fns/enhance-prompt";
@@ -197,7 +197,10 @@ type SpeechRecognition = {
   continuous: boolean;
   interimResults: boolean;
   onstart: (() => void) | null;
-  onresult: ((event: { results: { [n: number]: { [n: number]: { transcript: string } } } }) => void) | null;
+  onresult: ((event: {
+    resultIndex: number;
+    results: { length: number; [n: number]: { isFinal: boolean; [n: number]: { transcript: string } } };
+  }) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
 };
@@ -205,6 +208,7 @@ type SpeechRecognition = {
 function useVoiceInput(onResult: (text: string) => void) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [interim, setInterim] = useState(""); // live text as you speak
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const supported =
@@ -217,17 +221,22 @@ function useVoiceInput(onResult: (text: string) => void) {
       recognitionRef.current = null;
     }
     setListening(false);
+    setInterim("");
   }, []);
 
   const start = useCallback(async () => {
     setError(null);
 
-    // Explicitly request mic access — this triggers the browser's native permission popup.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("err:NoAPI");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop()); // release immediately
-    } catch {
-      setError("Microphone blocked. Click the lock icon in your address bar to allow access.");
+      stream.getTracks().forEach((t) => t.stop());
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : (err instanceof Error ? err.name : "Unknown");
+      setError(`err:${name}`);
       return;
     }
 
@@ -249,19 +258,34 @@ function useVoiceInput(onResult: (text: string) => void) {
 
     const rec = new SpeechRecognitionClass();
     rec.lang = "en-US";
-    rec.continuous = false;
-    rec.interimResults = false;
+    rec.continuous = true;       // keeps listening until user clicks Stop
+    rec.interimResults = true;   // shows text word-by-word as you speak
+
     rec.onstart = () => setListening(true);
+
     rec.onresult = (e) => {
-      const transcript = e.results[0]?.[0]?.transcript ?? "";
-      if (transcript) onResult(transcript);
-      stop();
+      let interimText = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
+        if (result.isFinal) {
+          const final = result[0]?.transcript?.trim() ?? "";
+          if (final) onResult(final); // append each finalized sentence to prompt
+        } else {
+          interimText += result[0]?.transcript ?? "";
+        }
+      }
+      setInterim(interimText);
     };
+
     rec.onerror = (e) => {
-      if (e.error !== "aborted") setError("Voice recognition error. Try again.");
+      if (e.error !== "aborted" && e.error !== "no-speech") {
+        setError(`err:${e.error}`);
+      }
       setListening(false);
+      setInterim("");
     };
-    rec.onend = () => setListening(false);
+
+    rec.onend = () => { setListening(false); setInterim(""); };
     recognitionRef.current = rec;
     rec.start();
   }, [supported, onResult, stop]);
@@ -271,7 +295,51 @@ function useVoiceInput(onResult: (text: string) => void) {
     else void start();
   }, [listening, start, stop]);
 
-  return { listening, toggle, supported, error, clearError: () => setError(null) };
+  return { listening, toggle, stop, supported, error, interim, clearError: () => setError(null), retry: start };
+}
+
+// ─── Mic Blocked Modal ────────────────────────────────────────────────────────
+function MicBlockedModal({ onClose, onRetry }: { onClose: () => void; onRetry: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }} className="relative z-10 w-full max-w-sm rounded-2xl border border-border bg-background p-6 shadow-2xl">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10">
+          <MicOff className="h-6 w-6 text-destructive" />
+        </div>
+        <h3 className="mb-1 font-display text-xl">Microphone blocked</h3>
+        <p className="mb-4 text-sm text-muted-foreground">Your browser has denied microphone access. Reset it in 3 steps:</p>
+        <ol className="mb-5 space-y-3 text-sm">
+          <li className="flex gap-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">1</span>
+            <span>Press <strong>F12</strong> to open DevTools → click <strong>Application</strong> tab → click <strong>Storage</strong></span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">2</span>
+            <span>Click <strong>"Clear site data"</strong> then close DevTools (<strong>F12</strong>)</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">3</span>
+            <span>Click <strong>Try again</strong> below — the browser will now ask for permission</span>
+          </li>
+        </ol>
+        <div className="flex gap-2">
+          <button
+            onClick={onRetry}
+            className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            Try again
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground hover:bg-surface"
+          >
+            Dismiss
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
 }
 
 // ─── Clarification Modal ──────────────────────────────────────────────────────
@@ -401,7 +469,19 @@ function NewProject() {
 
   // Advanced options
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [activeTab, setActiveTab] = useState<"theme" | "colors" | "font" | "style">("theme");
+  const [activeTab, setActiveTab] = useState<"theme" | "colors" | "font" | "style" | "pages" | "reviews">("theme");
+  const [pageCount, setPageCount] = useState<1 | 3 | 5>(1);
+  const [imgMode, setImgMode] = useState<"reference" | "rebuild">("reference");
+  const [urlMode, setUrlMode] = useState<"reference" | "clone">("reference");
+
+  // Input mode — prompt / business card / resume
+  const [inputMode, setInputMode] = useState<"prompt" | "business_card" | "resume">("prompt");
+  const [extracting, setExtracting] = useState(false);
+  const [extractedInfo, setExtractedInfo] = useState<Record<string, string> | null>(null);
+  const [extractCardUrl, setExtractCardUrl] = useState<string | null>(null);
+
+  // Google Reviews for testimonials
+  const [reviews, setReviews] = useState("");
 
   // Generation
   const [generating, setGenerating] = useState(false);
@@ -515,21 +595,44 @@ function NewProject() {
     await runGenerate(parts.join(". "));
   };
 
+  const buildFinalPrompt = (base: string) => {
+    const parts: string[] = [];
+    // Screenshot rebuild mode
+    if (images.length > 0 && imgMode === "rebuild") {
+      parts.push("Rebuild the exact design, layout, and visual style from the uploaded screenshot(s). Adapt all content to fit the following description:");
+    }
+    // URL clone mode
+    if (referenceUrl.trim() && urlMode === "clone") {
+      parts.push(`Clone the visual design, layout, color scheme, and overall style from this website: ${referenceUrl.trim()}. Create an original website inspired by it with the following content:`);
+    }
+    parts.push(base);
+    // Multi-page
+    if (pageCount === 3) parts.push("Generate a complete 3-page website (Home, About, Contact) with all pages linked via a working navigation bar.");
+    if (pageCount === 5) parts.push("Generate a complete 5-page website (Home, About, Services, Portfolio, Contact) with all pages linked via a working navigation bar and smooth page transitions.");
+    // Google Reviews / testimonials
+    if (reviews.trim()) {
+      const lines = reviews.trim().split("\n").filter(Boolean).slice(0, 5);
+      parts.push(`Include a testimonials/reviews section with these real customer reviews: ${lines.map((r, i) => `Review ${i + 1}: "${r}"`).join(" | ")}`);
+    }
+    return parts.join(" ");
+  };
+
   const generate = async () => {
     if (!activePrompt.trim() || generating || anyUploading) return;
     setError(null);
     setClarifying(true);
+    const finalPrompt = buildFinalPrompt(activePrompt);
     try {
-      const result = await clarifyPrompt({ data: { prompt: activePrompt } });
+      const result = await clarifyPrompt({ data: { prompt: finalPrompt } });
       if (result.needsClarification) {
-        setPendingGenerateData({ prompt: activePrompt, category, palette, theme, font, motion: "Cinematic", language, referenceUrl: referenceUrl.trim() || undefined, imageUrls: images.filter((img) => img.url).map((img) => img.url!), styleReferenceId: styleRefId });
+        setPendingGenerateData({ prompt: finalPrompt, category, palette, theme, font, motion: "Cinematic", language, referenceUrl: urlMode === "clone" ? undefined : referenceUrl.trim() || undefined, imageUrls: images.filter((img) => img.url).map((img) => img.url!), styleReferenceId: styleRefId });
         setClarifyQuestions(result.questions);
         setClarifying(false);
         return;
       }
     } catch { /* proceed without clarification */ }
     finally { setClarifying(false); }
-    await runGenerate(activePrompt);
+    await runGenerate(finalPrompt);
   };
 
   const LANGUAGES = ["English (US)", "French", "Japanese", "Spanish", "Hindi", "Arabic", "Portuguese", "German"];
@@ -540,6 +643,15 @@ function NewProject() {
     <>
       <UpgradeModal open={showUpgrade} onClose={() => setShowUpgrade(false)} />
       <GenerationOverlay active={generating} prompt={activePrompt} />
+
+      <AnimatePresence>
+        {voiceInput.error?.startsWith("err:") && (
+          <MicBlockedModal
+            onClose={voiceInput.clearError}
+            onRetry={() => { voiceInput.clearError(); void voiceInput.retry(); }}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {clarifyQuestions && !generating && (
@@ -587,6 +699,15 @@ function NewProject() {
                 className="overflow-hidden"
               >
                 <div className="flex flex-wrap gap-2 border-b border-border/40 px-4 py-3">
+                  {/* Image mode toggle */}
+                  <div className="mb-1 flex w-full items-center gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Image mode:</span>
+                    {(["reference", "rebuild"] as const).map((m) => (
+                      <button key={m} onClick={() => setImgMode(m)} className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium transition ${imgMode === m ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:text-foreground"}`}>
+                        {m === "reference" ? "Style reference" : "Rebuild this design"}
+                      </button>
+                    ))}
+                  </div>
                   {images.map((img) => (
                     <div key={img.id} className="relative">
                       <img src={img.preview} alt="Reference" className="h-16 w-16 rounded-xl border border-border object-cover" />
@@ -637,7 +758,25 @@ function NewProject() {
             )}
           </AnimatePresence>
 
-          {/* Textarea */}
+          {/* Input mode tabs */}
+          <div className="flex gap-1 border-b border-border/40 px-4 pt-3">
+            {([
+              { id: "prompt" as const, label: "✏️ Write prompt" },
+              { id: "business_card" as const, label: "📇 Business Card" },
+              { id: "resume" as const, label: "📄 Resume / CV" },
+            ]).map((m) => (
+              <button
+                key={m.id}
+                onClick={() => { setInputMode(m.id); setExtractedInfo(null); setExtractCardUrl(null); }}
+                className={`rounded-t-lg px-3 py-1.5 text-xs font-medium transition ${inputMode === m.id ? "border border-b-0 border-border bg-background text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Textarea (prompt mode) */}
+          {inputMode === "prompt" && (
           <div className="px-4 pb-2 pt-4">
             <textarea
               value={prompt}
@@ -648,26 +787,152 @@ function NewProject() {
               className="w-full resize-none bg-transparent text-base leading-relaxed outline-none placeholder:text-muted-foreground"
             />
           </div>
+          )}
+
+          {/* Business Card / Resume mode */}
+          {(inputMode === "business_card" || inputMode === "resume") && (
+            <div className="px-4 pb-4 pt-4">
+              {!extractCardUrl ? (
+                <label className="flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-border bg-surface/50 py-10 transition hover:border-primary/40 hover:bg-primary/5">
+                  <span className="text-4xl">{inputMode === "business_card" ? "📇" : "📄"}</span>
+                  <div className="text-center">
+                    <p className="font-medium">Upload {inputMode === "business_card" ? "your business card" : "your resume / CV"}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {inputMode === "business_card"
+                        ? "AI will read your card and build your website automatically"
+                        : "AI will read your CV and build your portfolio website"}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary">Choose image</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const base64 = await new Promise<string>((res, rej) => {
+                        const r = new FileReader();
+                        r.onload = () => res((r.result as string).split(",")[1]);
+                        r.onerror = () => rej(r.error);
+                        r.readAsDataURL(file);
+                      });
+                      const { url } = await uploadImage({ data: { base64, fileName: file.name, contentType: file.type } });
+                      setExtractCardUrl(url);
+                    }}
+                  />
+                </label>
+              ) : !extractedInfo ? (
+                <div className="flex flex-col items-center gap-4">
+                  <img src={extractCardUrl} alt="Uploaded" className="max-h-48 rounded-xl border border-border object-contain shadow-md" />
+                  <button
+                    onClick={async () => {
+                      setExtracting(true);
+                      try {
+                        const info = await extractFromImage({ data: { imageUrl: extractCardUrl, type: inputMode } });
+                        setExtractedInfo(info);
+                        if (info.prompt) setPrompt(info.prompt as string);
+                      } catch {
+                        alert("Could not read the image. Try a clearer photo.");
+                      } finally {
+                        setExtracting(false);
+                      }
+                    }}
+                    disabled={extracting}
+                    className="flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                  >
+                    {extracting ? <><Loader2 className="h-4 w-4 animate-spin" /> Reading…</> : "✨ Extract & Build"}
+                  </button>
+                  <button onClick={() => setExtractCardUrl(null)} className="text-xs text-muted-foreground hover:text-foreground">Use a different image</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-primary">✓ Extracted successfully</span>
+                    <button onClick={() => { setExtractedInfo(null); setExtractCardUrl(null); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground">Start over</button>
+                  </div>
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm space-y-1">
+                    {Object.entries(extractedInfo).filter(([k]) => k !== "prompt").map(([k, v]) => v && (
+                      <div key={k} className="flex gap-2">
+                        <span className="w-20 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{k}</span>
+                        <span className="text-foreground/80">{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Prompt auto-filled below. Click <strong>Generate</strong> to build your website.</p>
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary/50"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Reference URL (collapsible) */}
           <AnimatePresence>
             {showUrlInput && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
-                <div className="flex items-center gap-2 border-t border-border/40 px-4 py-2">
-                  <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <input
-                    autoFocus
-                    type="url"
-                    value={referenceUrl}
-                    onChange={(e) => setReferenceUrl(e.target.value)}
-                    placeholder="Paste reference website URL for style inspiration…"
-                    className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-                  />
-                  {referenceUrl && (
-                    <button onClick={() => setReferenceUrl("")} className="shrink-0 text-muted-foreground hover:text-foreground">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                <div className="border-t border-border/40 px-4 py-2">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">URL mode:</span>
+                    {(["reference", "clone"] as const).map((m) => (
+                      <button key={m} onClick={() => setUrlMode(m)} className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium transition ${urlMode === m ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground hover:text-foreground"}`}>
+                        {m === "reference" ? "Style inspiration" : "Clone this website"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <input
+                      autoFocus
+                      type="url"
+                      value={referenceUrl}
+                      onChange={(e) => setReferenceUrl(e.target.value)}
+                      placeholder={urlMode === "clone" ? "Paste URL to clone its design…" : "Paste reference website URL for style inspiration…"}
+                      className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                    />
+                    {referenceUrl && (
+                      <button onClick={() => setReferenceUrl("")} className="shrink-0 text-muted-foreground hover:text-foreground">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Live voice listening panel — appears while mic is active */}
+          <AnimatePresence>
+            {voiceInput.listening && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden border-t border-red-500/20"
+              >
+                <div className="flex items-start gap-3 bg-red-500/5 px-4 py-3">
+                  {/* Pulsing mic */}
+                  <span className="relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-50" />
+                    <span className="relative h-2.5 w-2.5 rounded-full bg-red-400" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-medium uppercase tracking-widest text-red-400/80">Listening…</p>
+                    <p className="mt-0.5 text-sm text-foreground/70 italic">
+                      {voiceInput.interim || "Start speaking — text will appear here"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={voiceInput.stop}
+                    className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-500/20"
+                  >
+                    Done
+                  </button>
                 </div>
               </motion.div>
             )}
@@ -767,16 +1032,7 @@ function NewProject() {
           </div>
 
           {/* Errors */}
-          <AnimatePresence>
-            {voiceInput.error && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="flex items-center justify-between border-t border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-                  <span><MicOff className="mr-1.5 inline h-3 w-3" />{voiceInput.error}</span>
-                  <button onClick={voiceInput.clearError}><X className="h-3 w-3" /></button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* mic error handled via MicBlockedModal above */}
           {imageError && (
             <div className="border-t border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
               {imageError}
@@ -833,7 +1089,7 @@ function NewProject() {
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: [0.2, 0.7, 0.2, 1] }} className="overflow-hidden">
                 <div className="border-t border-border/50">
                   <div className="flex gap-1 border-b border-border/50 px-4 pt-3">
-                    {(["theme", "colors", "font", "style"] as const).map((tab) => (
+                    {(["theme", "colors", "font", "style", "pages", "reviews"] as const).map((tab) => (
                       <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-2 text-xs font-mono uppercase tracking-widest transition ${activeTab === tab ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}>
                         {tab}
                       </button>
@@ -891,6 +1147,41 @@ function NewProject() {
                             </div>
                           </button>
                         ))}
+                      </div>
+                    )}
+                    {activeTab === "pages" && (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {([1, 3, 5] as const).map((n) => (
+                          <button key={n} onClick={() => setPageCount(n)} className={`rounded-xl border p-4 text-left transition ${pageCount === n ? "border-primary/50 bg-primary/10" : "border-border bg-surface hover:border-foreground/30"}`}>
+                            <div className="text-lg font-bold text-foreground">{n}</div>
+                            <div className="mt-0.5 text-sm font-medium">{n === 1 ? "Single page" : n === 3 ? "3 pages" : "5 pages"}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {n === 1 ? "One scrollable page" : n === 3 ? "Home · About · Contact" : "Home · About · Services · Portfolio · Contact"}
+                            </div>
+                            {n > 1 && <div className="mt-2 text-[10px] text-primary">Linked navigation included</div>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {activeTab === "reviews" && (
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-sm font-medium">Google Reviews / Testimonials</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">Paste your real customer reviews (one per line, max 5). AI will embed them as a testimonials section in the generated website.</p>
+                        </div>
+                        <textarea
+                          value={reviews}
+                          onChange={(e) => setReviews(e.target.value)}
+                          rows={6}
+                          placeholder={`"Excellent service, highly recommend!" — Rahul S.\n"Best in the city, amazing experience." — Priya M.\n"Very professional and friendly staff." — Amit K.`}
+                          className="w-full resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary/50 placeholder:text-muted-foreground/60"
+                        />
+                        {reviews.trim() && (
+                          <div className="flex items-center gap-1.5 text-xs text-primary">
+                            <span>✓</span>
+                            <span>{reviews.trim().split("\n").filter(Boolean).length} review{reviews.trim().split("\n").filter(Boolean).length > 1 ? "s" : ""} will be included in your website</span>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-border/50 pt-4">

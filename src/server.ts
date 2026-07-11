@@ -51,7 +51,7 @@ const APP_SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "Permissions-Policy": "camera=(), microphone=(self), geolocation=(), payment=()",
 };
 
 function applySecurityHeaders(response: Response): Response {
@@ -121,6 +121,57 @@ async function handleCronRenewalReminder(request: Request): Promise<Response> {
   });
 }
 
+// n8n can POST here with x-neuraxine-key header to generate a website
+async function handleGenerateRequest(request: Request): Promise<Response> {
+  const json = () => (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  const J = json();
+
+  const secret = request.headers.get("x-neuraxine-key");
+  if (!secret || secret !== process.env.NEURAXINE_BUILDER_SECRET) {
+    return J({ error: "unauthorized" }, 401);
+  }
+
+  let prompt: string | undefined;
+  try {
+    const body = await request.json() as { prompt?: string };
+    prompt = body.prompt;
+  } catch {
+    return J({ error: "invalid JSON body" }, 400);
+  }
+  if (!prompt) return J({ error: "prompt required" }, 400);
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return J({ error: "OPENAI_API_KEY not configured" }, 500);
+
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      max_tokens: 8000,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are Lumen's website generator. Return ONLY a complete, production-quality, responsive single-file HTML website (all CSS and JS inline, modern design, mobile friendly). Start with <!DOCTYPE html>. No markdown fences, no explanations.",
+        },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+
+  const data = await r.json() as { choices?: { message?: { content?: string } }[] };
+  let html = data?.choices?.[0]?.message?.content ?? "";
+  html = html.replace(/^```html\s*/i, "").replace(/```\s*$/, "").trim();
+
+  if (!html.toLowerCase().startsWith("<!doctype")) {
+    return J({ error: "generation failed" }, 500);
+  }
+
+  return J({ html });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     const url = new URL(request.url);
@@ -128,6 +179,11 @@ export default {
     // Cron — daily renewal reminder emails
     if (url.pathname === "/api/cron/renewal-reminder") {
       return handleCronRenewalReminder(request);
+    }
+
+    // n8n website generation endpoint — protected by NEURAXINE_BUILDER_SECRET header
+    if (url.pathname === "/api/generate" && request.method === "POST") {
+      return handleGenerateRequest(request);
     }
 
     // Integration API — public CORS endpoints for generated websites
